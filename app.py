@@ -46,7 +46,7 @@ GEMINI_PER_TRY_TIMEOUT = 25
 GEMINI_TOTAL_BUDGET = 40
 
 # ==========================================
-# 🎨 CSSデザイン（スマホの文字消え対策・完全版）
+# 🎨 CSSデザイン（スマホの文字消え・白文字化対策・完全版）
 # ==========================================
 st.markdown("""
 <style>
@@ -93,6 +93,17 @@ div[data-testid="stExpander"] div[data-testid="stHorizontalBlock"] {
 </style>
 """, unsafe_allow_html=True)
 
+if "page" not in st.session_state:
+    st.session_state.page = "bookshelf"
+if "selected_book" not in st.session_state:
+    st.session_state.selected_book = None
+if "editing_memo_id" not in st.session_state:
+    st.session_state.editing_memo_id = None
+if "confirm_delete_id" not in st.session_state:
+    st.session_state.confirm_delete_id = None
+if "flash" not in st.session_state:
+    st.session_state.flash = ""
+
 # ==========================================
 # 共通関数
 # ==========================================
@@ -117,7 +128,6 @@ def get_book_id(book):
         v = book.get(k)
         if v:
             return str(v).strip()
-    # 見つからない場合は辞書の最初の値やキーを総当たり
     for k, v in book.items():
         if v and "book_" in str(v):
             return str(v).strip()
@@ -142,6 +152,8 @@ def gas_post(payload):
 def fetch_memos(book_id):
     try:
         res = requests.get(GAS_URL, params={"action": "getMemos", "bookId": str(book_id)}, timeout=10, verify=VERIFY_SSL)
+        if res.status_code != 200:
+            return []
         data = res.json()
         return data if isinstance(data, list) else []
     except Exception:
