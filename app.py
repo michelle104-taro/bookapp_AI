@@ -46,43 +46,52 @@ GEMINI_PER_TRY_TIMEOUT = 25
 GEMINI_TOTAL_BUDGET = 40
 
 # ==========================================
-# 🎨 CSSデザイン
+# 🎨 CSSデザイン（スマホの文字消え対策・完全版）
 # ==========================================
 st.markdown("""
 <style>
+/* アプリ全体の背景と文字色を強制指定（ダークモード反転を防ぐ） */
 .stApp {
-    background-color: #f9f6f0;
+    background-color: #f9f6f0 !important;
+    color: #2c2c2c !important;
 }
+
+/* タイトルや見出し、通常のテキストの文字色をくっきり黒に固定 */
+h1, h2, h3, h4, h5, h6, p, span, label, div {
+    color: #2c2c2c !important;
+}
+
+/* 本棚のヘッダーブロックのデザイン */
 div[data-testid="stHorizontalBlock"] {
-    background-color: #C19A6B; 
+    background-color: #C19A6B !important; 
     padding: 20px 10px 15px 10px;
     border-bottom: 12px solid #8B5A2B; 
     box-shadow: inset 0px -10px 15px rgba(0,0,0,0.15), 0px 5px 10px rgba(0,0,0,0.2);
     border-radius: 3px;
     margin-bottom: 25px;
 }
+
+/* ヘッダーブロック内の文字は白で見やすくする */
+div[data-testid="stHorizontalBlock"] h1, 
+div[data-testid="stHorizontalBlock"] span, 
+div[data-testid="stHorizontalBlock"] p {
+    color: #ffffff !important;
+}
+
+/* 表紙画像の影と角丸 */
 div[data-testid="stImage"] img {
     box-shadow: 5px 5px 10px rgba(0,0,0,0.4);
     border-radius: 2px;
 }
+
+/* エクスパンダー内の背景調整 */
 div[data-testid="stExpander"] div[data-testid="stHorizontalBlock"] {
-    background-color: transparent;
+    background-color: transparent !important;
     border-bottom: none;
     box-shadow: none;
 }
 </style>
 """, unsafe_allow_html=True)
-
-if "page" not in st.session_state:
-    st.session_state.page = "bookshelf"
-if "selected_book" not in st.session_state:
-    st.session_state.selected_book = None
-if "editing_memo_id" not in st.session_state:
-    st.session_state.editing_memo_id = None
-if "confirm_delete_id" not in st.session_state:
-    st.session_state.confirm_delete_id = None
-if "flash" not in st.session_state:
-    st.session_state.flash = ""
 
 # ==========================================
 # 共通関数
