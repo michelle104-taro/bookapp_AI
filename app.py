@@ -747,11 +747,11 @@ if st.session_state.page == "bookshelf":
     /* 本棚の木目スタイル */
     div[data-testid="stHorizontalBlock"] {
         background-color: #C19A6B !important; 
-        padding: 20px 10px 15px 10px !important;
-        border-bottom: 12px solid #8B5A2B !important; 
+        padding: 15px 8px 12px 8px !important;
+        border-bottom: 10px solid #8B5A2B !important; 
         box-shadow: inset 0px -10px 15px rgba(0,0,0,0.15), 0px 5px 10px rgba(0,0,0,0.2) !important;
         border-radius: 3px !important;
-        margin-bottom: 25px !important;
+        margin-bottom: 20px !important;
     }
 
     div[data-testid="stHorizontalBlock"] p,
@@ -777,25 +777,33 @@ if st.session_state.page == "bookshelf":
         color: #2c2c2c !important;
     }
 
-    /* 📱 スマホ(iPhone等)強制的レイアウト調整 */
+    /* 📱 スマホ(iPhone 100%文字サイズ)の完全横並び用レスポンシブCSS */
     @media (max-width: 768px) {
-        /* Streamlitのデフォルトの1列縦並び強制を上書きし、横並び（wrap可）にする */
-        div[data-testid="stHorizontalBlock"]:not(.element-container *) {
+        /* 本棚を2列で横並びにする（要素間隔をコンパクトに） */
+        div[data-testid="stHorizontalBlock"] {
             display: flex !important;
             flex-direction: row !important;
             flex-wrap: wrap !important;
+            gap: 4px !important;
         }
-        /* 各カラムを幅48%にして2列に強制配置 */
-        div[data-testid="stHorizontalBlock"]:not(.element-container *) > div[data-testid="column"],
-        div[data-testid="stHorizontalBlock"]:not(.element-container *) > div[data-testid="stColumn"] {
-            width: 48% !important;
-            min-width: 48% !important;
-            max-width: 48% !important;
-            flex: 1 1 48% !important;
-            margin-bottom: 15px !important;
+        div[data-testid="stHorizontalBlock"] > div[data-testid="column"],
+        div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] {
+            width: calc(48% - 2px) !important;
+            min-width: calc(48% - 2px) !important;
+            max-width: calc(48% - 2px) !important;
+            flex: 0 0 calc(48% - 2px) !important;
+            padding: 0 2px !important;
+            margin-bottom: 10px !important;
+        }
+
+        /* 本棚内のボタンの余白と幅をコンパクト化 */
+        div[data-testid="stHorizontalBlock"] button {
+            padding: 4px 8px !important;
+            font-size: 0.8rem !important;
+            min-height: 0 !important;
         }
         
-        /* エクスパンダー内（検索結果）は1列に戻す */
+        /* エクスパンダー内（AI検索結果）は1列に戻す */
         div[data-testid="stExpander"] div[data-testid="stHorizontalBlock"] {
             display: flex !important;
             flex-direction: column !important;
@@ -822,15 +830,15 @@ if st.session_state.page == "bookshelf":
         }
         /* 本のタイトルは2行まで */
         .book-title {
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             font-weight: 700;
-            line-height: 1.35;
-            height: 2.7em;
+            line-height: 1.3;
+            height: 2.6em;
             overflow: hidden;
             display: -webkit-box;
             -webkit-line-clamp: 2;
             -webkit-box-orient: vertical;
-            margin: 6px 0 6px 0;
+            margin: 4px 0 4px 0;
         }
         </style>
         """, unsafe_allow_html=True)
@@ -982,7 +990,7 @@ if st.session_state.page == "bookshelf":
         if not view_books:
             st.info("条件に合う本が見つからなかったよ。")
 
-        # 5列で出力（スマホではCSSで自動的に2列に折り返されます）
+        # スマホでの画像を少しコンパクト(90px)にして横幅に余裕を持たせる
         cols_per_row = 5
         for i in range(0, len(view_books), cols_per_row):
             cols = st.columns(cols_per_row, gap="small")
@@ -992,9 +1000,9 @@ if st.session_state.page == "bookshelf":
                     with cols[j]:
                         img_url = str(book.get("画像URL", "") or "").strip()
                         if img_url.startswith("http"):
-                            st.image(img_url, width=120)
+                            st.image(img_url, width=90)
                         else:
-                            st.image(PLACEHOLDER_IMG, width=120)
+                            st.image(PLACEHOLDER_IMG, width=90)
 
                         book_title = book.get("タイトル", "タイトル不明")
                         if ENABLE_DESIGN_TWEAKS:
@@ -1018,26 +1026,37 @@ if st.session_state.page == "bookshelf":
 # ==========================================
 elif st.session_state.page == "detail":
     
-    # 📱 スマホ向け：メモの編集・削除ボタンを強制的に横並びにするCSS
+    # 📱 スマホ向け：メモの「編集」「削除」ボタンのサイズと余白を詰めて横並びにおさめるCSS
     st.markdown("""
     <style>
     @media (max-width: 768px) {
-        /* メモの中のボタン配置エリアを横並びFlexに固定 */
+        /* メモ内のボタン配置ブロック */
         div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] {
             display: flex !important;
             flex-direction: row !important;
             flex-wrap: nowrap !important;
             align-items: center !important;
-            gap: 10px !important;
+            justify-content: flex-start !important;
+            gap: 6px !important;
         }
+        /* 各カラムの幅自動調整と最小幅の削除 */
         div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] > div[data-testid="column"],
         div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] {
             width: auto !important;
             min-width: 0 !important;
+            max-width: none !important;
             flex: 0 0 auto !important;
-            margin-bottom: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
         }
-        /* 画面右端の空白用カラムを消去 */
+        /* ボタン自体のサイズ・余白をキュッとコンパクトに */
+        div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] button {
+            padding: 2px 8px !important;
+            font-size: 0.8rem !important;
+            min-height: 32px !important;
+            line-height: 1.2 !important;
+        }
+        /* 3列目の余白用カラムを削除 */
         div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] > div:nth-child(3) {
             display: none !important;
         }
