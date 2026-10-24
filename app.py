@@ -92,6 +92,8 @@ if "editing_memo_id" not in st.session_state:
     st.session_state.editing_memo_id = None
 if "confirm_delete_id" not in st.session_state:
     st.session_state.confirm_delete_id = None
+if "confirm_delete_book" not in st.session_state:
+    st.session_state.confirm_delete_book = False
 if "flash" not in st.session_state:
     st.session_state.flash = ""
 
@@ -139,7 +141,10 @@ def gas_post(payload):
     except Exception as e:
         return False, str(e)
 
-# ---------- メモ・Insight（GAS連携）----------
+# ---------- 本・メモ・Insight（GAS連携）----------
+def delete_book(book_id):
+    return gas_post({"action": "deleteBook", "bookId": str(book_id)})
+
 def fetch_memos(book_id):
     try:
         res = requests.get(GAS_URL, params={"action": "getMemos", "bookId": str(book_id)}, timeout=10, verify=VERIFY_SSL)
@@ -443,37 +448,25 @@ def resolve_cover_with_log(isbn, openbd_cover, title="", author=""):
         for d in dirs_to_check:
             for suf in suffixes:
                 url = f"https://shop.r10s.jp/book/cabinet/{d}/{isbn}{suf}"
-                logs.append(f"🔍 楽天ブックス確認 [dir:{d}, suf:{suf}]: {url}")
                 if image_exists(url):
-                    logs.append(f"🟢 [成功] 楽天ブックスの画像にヒットしました ({url})")
                     return url, logs
-                else:
-                    logs.append(f"🔴 [不一致/次へ]")
 
     if openbd_cover:
-        logs.append(f"🔍 OpenBD直接画像URLを確認中: {openbd_cover}")
         if image_exists(openbd_cover):
-            logs.append(f"🟢 [成功] OpenBD直接画像を採用しました")
             return openbd_cover, logs
 
     if isbn:
         url = f"https://ndlsearch.ndl.go.jp/thumbnail/{isbn}.jpg"
-        logs.append(f"🔍 国立国会図書館サムネイルを確認中: {url}")
         if image_exists(url):
-            logs.append(f"🟢 [成功] 国立国会図書館サムネイルを採用しました")
             return url, logs
 
     if title:
-        logs.append(f"🔍 Google Books APIへタイトル検索を実行中...")
         gb_data = lookup_google_books(title, author)
         if gb_data and gb_data.get("imageUrl"):
             gb_url = gb_data["imageUrl"]
-            logs.append(f"🔍 Google Books画像URLを確認中: {gb_url}")
             if image_exists(gb_url):
-                logs.append(f"🟢 [成功] Google Books API画像を採用しました")
                 return gb_url, logs
 
-    logs.append(f"⚠️ 【結論】有効な画像が見つからなかったため、No Imageになります。")
     return "", logs
 
 def enrich_candidate(c):
@@ -669,14 +662,16 @@ if st.session_state.page == "bookshelf":
 
     st.title("📚 わたしの本棚")
 
-    with st.expander("➕ AI書店員に本を探してもらう", expanded=True):
-        st.write("本のタイトルや著者名を入力すると、ISBNを特定し、楽天ブックスの各種フォルダ＆サフィックスパターンをしらみつぶしに総当たりして表紙画像を取得します！")
-
-        search_keyword = st.text_input("検索キーワード",
+    # ① デフォルトで閉じる
+    with st.expander("➕ AI書店員に本を探してもらう", expanded=False):
+        # ② 説明文削除
+        # ③ プレースホルダ変更
+        search_keyword = st.text_input("本のタイトル・著者",
                                        placeholder="例：嫌われる勇気 / 付加価値のつくりかた / シン・営業力")
         if st.button("🔍 AIに候補を探してもらう"):
             if search_keyword.strip():
-                with st.spinner("AI書店員が書籍をピックアップし、楽天ブックスをしらみつぶし総当たり調査中..."):
+                # ⑤ スピナー文言変更
+                with st.spinner("AIが本を探しに行っています。"):
                     results, err_msg, info = search_books_ai(search_keyword.strip())
                     st.session_state.search_results = results
                     st.session_state.search_error = err_msg
@@ -692,8 +687,6 @@ if st.session_state.page == "bookshelf":
             if results:
                 st.write("---")
                 st.write(f"🎯 **AIが {len(results)} 冊の本をピックアップしたよ！追加したい本を選んでね：**")
-                if info:
-                    st.caption(f"⚡ 検索: {info}")
 
                 cols = st.columns(2)
                 for idx, book in enumerate(results):
@@ -702,10 +695,7 @@ if st.session_state.page == "bookshelf":
                             st.image(book["imageUrl"], width=100)
                             st.markdown(f"**{book['title']}**")
                             st.write(f"✍️ {book['author']}")
-                            if book["verified"] or book["has_cover"]:
-                                st.caption("✅ 書誌・表紙画像確認済み")
-                            else:
-                                st.caption("⚠️ AI推定（表紙未確認）。表紙画像が無い時は下で指定してね")
+                            
                             if book["summary"]:
                                 s = book["summary"]
                                 st.caption(s[:100] + "..." if len(s) > 100 else s)
@@ -715,10 +705,8 @@ if st.session_state.page == "bookshelf":
                                 custom_img = st.text_input("🖼️ 表紙画像のURL（任意）",
                                                            key=f"img_{idx}",
                                                            placeholder="空欄なら「画像なし」で登録")
-
-                            with st.popover("🔍 画像取得のプロセスログを見る"):
-                                for log_line in book.get("logs", []):
-                                    st.code(log_line)
+                                                           
+                            # ⑥ プロセスログ表示削除
 
                             if st.button("✅ この本を本棚に追加", key=f"add_book_{idx}"):
                                 payload = {
@@ -742,27 +730,31 @@ if st.session_state.page == "bookshelf":
                 else:
                     st.info("AIが本を見つけられなかったよ。キーワードを変えて試してね。")
 
-    with st.popover("📝 見つからない時は手動で登録する"):
-        manual_title = st.text_input("タイトル（必須）")
-        manual_author = st.text_input("著者名")
-        manual_image = st.text_input("画像URL（Web上の画像リンク）")
-        manual_summary = st.text_area("概要・メモ")
-        if st.button("手動で本棚に追加"):
-            if manual_title.strip():
-                ok, err = gas_post({
-                    "action": "addBook",
-                    "title": manual_title.strip(),
-                    "author": manual_author.strip() or "著者不明",
-                    "imageUrl": manual_image.strip() or PLACEHOLDER_IMG,
-                    "summary": manual_summary.strip() or "概要なし",
-                })
-                if ok:
-                    st.session_state.flash = f"「{manual_title.strip()}」を手動で追加したよ！"
-                    st.rerun()
-                else:
-                    st.error(f"追加エラー: {err}")
-            else:
-                st.warning("タイトルを入力してね。")
+            # ④ 検索結果が出た後に手動登録ボタンを表示
+            st.write("---")
+            with st.popover("📝 見つからない時は手動で登録する"):
+                manual_title = st.text_input("タイトル（必須）")
+                manual_author = st.text_input("著者名")
+                manual_image = st.text_input("画像URL（Web上の画像リンク）")
+                manual_summary = st.text_area("概要・メモ")
+                if st.button("手動で本棚に追加"):
+                    if manual_title.strip():
+                        ok, err = gas_post({
+                            "action": "addBook",
+                            "title": manual_title.strip(),
+                            "author": manual_author.strip() or "著者不明",
+                            "imageUrl": manual_image.strip() or PLACEHOLDER_IMG,
+                            "summary": manual_summary.strip() or "概要なし",
+                        })
+                        if ok:
+                            st.session_state.flash = f"「{manual_title.strip()}」を手動で追加したよ！"
+                            if "search_results" in st.session_state:
+                                del st.session_state.search_results
+                            st.rerun()
+                        else:
+                            st.error(f"追加エラー: {err}")
+                    else:
+                        st.warning("タイトルを入力してね。")
 
     if st.session_state.flash:
         st.success(st.session_state.flash)
@@ -775,9 +767,11 @@ if st.session_state.page == "bookshelf":
     # ==========================================
     books = fetch_books()
     if isinstance(books, list) and len(books) > 0:
-        cols_per_row = 4
+        # ⑦ 本の隙間を詰めて、5列で並べる。超えたら下の段へ自動追加
+        cols_per_row = 5
         for i in range(0, len(books), cols_per_row):
-            cols = st.columns(cols_per_row)
+            # gap="small" で隙間を詰める
+            cols = st.columns(cols_per_row, gap="small")
             for j in range(cols_per_row):
                 if i + j < len(books):
                     book = books[i + j]
@@ -793,6 +787,7 @@ if st.session_state.page == "bookshelf":
                             st.session_state.selected_book = book
                             st.session_state.editing_memo_id = None
                             st.session_state.confirm_delete_id = None
+                            st.session_state.confirm_delete_book = False
                             st.session_state.page = "detail"
                             st.rerun()
     else:
@@ -813,6 +808,7 @@ elif st.session_state.page == "detail":
         st.session_state.selected_book = None
         st.session_state.editing_memo_id = None
         st.session_state.confirm_delete_id = None
+        st.session_state.confirm_delete_book = False
         st.rerun()
 
     memo_key = f"memos_{book_id}"
@@ -868,9 +864,6 @@ elif st.session_state.page == "detail":
         with st.container(border=True):
             st.markdown("### ✨ AI Insight")
             st.caption(f"🕒 更新: {st.session_state.get(insight_time_key, '')}")
-            gem_info = st.session_state.get("gemini_info", "")
-            if gem_info:
-                st.caption(f"⚡ 生成: {gem_info}")
             st.markdown(insight_text)
 
     st.divider()
@@ -958,3 +951,30 @@ elif st.session_state.page == "detail":
                             st.rerun()
     else:
         st.info("まだメモがないよ。最初の気づきを書いてみよう！")
+        
+    # ⑧ 画面の一番下に本削除ボタンを配置
+    st.divider()
+    st.markdown("### ⚙️ 管理")
+    if st.session_state.get("confirm_delete_book"):
+        st.warning("⚠️ 本当にこの本を削除しますか？（本データ・メモ・Insight全て削除されます）")
+        c1, c2 = st.columns([1, 4])
+        with c1:
+            if st.button("はい、削除します", type="primary"):
+                with st.spinner("削除中..."):
+                    ok, err = delete_book(book_id)
+                if ok:
+                    st.session_state.page = "bookshelf"
+                    st.session_state.selected_book = None
+                    st.session_state.confirm_delete_book = False
+                    st.session_state.flash = f"「{title}」を本棚から削除したよ。"
+                    st.rerun()
+                else:
+                    st.error(f"削除に失敗したよ: {err}")
+        with c2:
+            if st.button("キャンセル"):
+                st.session_state.confirm_delete_book = False
+                st.rerun()
+    else:
+        if st.button("🗑️ この本を本棚から削除する"):
+            st.session_state.confirm_delete_book = True
+            st.rerun()
