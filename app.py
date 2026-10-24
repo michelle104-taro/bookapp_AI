@@ -782,6 +782,29 @@ if st.session_state.page == "bookshelf":
     div[data-testid="stExpander"] div[data-testid="stHorizontalBlock"] span {
         color: #2c2c2c !important;
     }
+
+    /* 📱 スマホ(iPhone等)対応：本棚のブロックを横2列（折り返し）にする */
+    @media (max-width: 768px) {
+        div[data-testid="stHorizontalBlock"] {
+            flex-direction: row !important;
+            flex-wrap: wrap !important;
+        }
+        div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+            min-width: calc(45% - 5px) !important;
+            width: calc(45% - 5px) !important;
+            flex: 1 1 calc(45% - 5px) !important;
+        }
+        /* エクスパンダーの中（AI検索結果など）はデフォルトの縦並びに戻す */
+        div[data-testid="stExpander"] div[data-testid="stHorizontalBlock"] {
+            flex-direction: column !important;
+            flex-wrap: nowrap !important;
+        }
+        div[data-testid="stExpander"] div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+            min-width: 100% !important;
+            width: 100% !important;
+            flex: 1 1 100% !important;
+        }
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -994,6 +1017,30 @@ if st.session_state.page == "bookshelf":
 # 📖 詳細・メモ画面
 # ==========================================
 elif st.session_state.page == "detail":
+    
+    # 📱 スマホ向け：メモの編集・削除ボタンを横並びにするCSS
+    st.markdown("""
+    <style>
+    @media (max-width: 768px) {
+        /* メモ一覧の枠線付きコンテナ内にある「編集」「削除」ボタンの列を横並びにする */
+        div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] {
+            flex-direction: row !important;
+            flex-wrap: nowrap !important;
+            gap: 10px !important;
+        }
+        div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+            width: auto !important;
+            min-width: 0 !important;
+            flex: 0 1 auto !important;
+        }
+        /* 余白調整用の3列目を非表示にする */
+        div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:nth-child(3) {
+            display: none !important;
+        }
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
     book = st.session_state.selected_book
     book_id = get_book_id(book)
     title = get_field(book, ["タイトル"], "タイトル不明")
