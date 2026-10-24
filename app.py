@@ -1,3 +1,4 @@
+import html
 import os
 import re
 import json
@@ -19,6 +20,11 @@ GAS_URL = "https://script.google.com/macros/s/AKfycbyjCGR7_X5dDvnHjsK-CosihwtmeQ
 VERIFY_SSL = False
 PLACEHOLDER_IMG = "https://placehold.co/130x180/e2e8f0/a0aec0?text=No+Image"
 
+# ★★★ 改善機能のスイッチ ★★★
+ENABLE_DESIGN_TWEAKS = True   # 見た目の仕上げ。崩れる時は False で元の見た目に戻る
+USE_BUNDLE_API = False        # GASに getBookBundle を追加したら True（メモ＋Insightを1回で取得）
+BOOKS_CACHE_SECONDS = 600     # 本棚データの自動更新間隔（秒）
+
 st.set_page_config(page_title="My Bookshelf", layout="wide")
 
 # ==========================================
@@ -39,7 +45,7 @@ GEMINI_MODELS = [
     ("gemini-3.5-flash-lite", "minimal"),
     ("gemini-3.1-flash-lite", "minimal"),
     ("gemini-3.8-flash", "low"),
-    ("gemini-1.5-flash", ""),
+    ("gemini-2.5-flash-lite", ""),
 ]
 GEMINI_MAX_OUTPUT_TOKENS = 1500
 GEMINI_PER_TRY_TIMEOUT = 25
@@ -50,33 +56,29 @@ GEMINI_TOTAL_BUDGET = 40
 # ==========================================
 st.markdown("""
 <style>
-/* アプリ全体の背景と基本の文字色 */
 .stApp {
     background-color: #f9f6f0 !important;
 }
 
-/* 基本の文字色を強制的に黒（ダークモードでの白飛び防止） */
 p, span, label, h1, h2, h3, h4, h5, h6, li, div {
     color: #2c2c2c !important;
 }
 
-/* 🔘 すべてのボタンの配色を強制固定（背景と同化させない） */
-button[kind="secondary"] {
+button[kind="secondary"], button[kind="secondaryFormSubmit"] {
     background-color: #ffffff !important;
     border: 1px solid #cccccc !important;
 }
-button[kind="secondary"] * {
+button[kind="secondary"] *, button[kind="secondaryFormSubmit"] * {
     color: #2c2c2c !important;
 }
-button[kind="primary"] {
+button[kind="primary"], button[kind="primaryFormSubmit"] {
     background-color: #ff4b4b !important;
     border: 1px solid #ff4b4b !important;
 }
-button[kind="primary"] * {
+button[kind="primary"] *, button[kind="primaryFormSubmit"] * {
     color: #ffffff !important;
 }
 
-/* 表紙画像の影と角丸 */
 div[data-testid="stImage"] img {
     box-shadow: 5px 5px 10px rgba(0,0,0,0.4);
     border-radius: 2px;
@@ -84,28 +86,67 @@ div[data-testid="stImage"] img {
 </style>
 """, unsafe_allow_html=True)
 
-if "page" not in st.session_state:
-    st.session_state.page = "bookshelf"
-if "selected_book" not in st.session_state:
-    st.session_state.selected_book = None
-if "editing_memo_id" not in st.session_state:
-    st.session_state.editing_memo_id = None
-if "confirm_delete_id" not in st.session_state:
-    st.session_state.confirm_delete_id = None
-if "confirm_delete_book" not in st.session_state:
-    st.session_state.confirm_delete_book = False
-if "flash" not in st.session_state:
-    st.session_state.flash = ""
+if ENABLE_DESIGN_TWEAKS:
+    st.markdown("""
+    <style>
+    /* 表紙の縦横比をそろえる（棚が整って見える） */
+    div[data-testid="stImage"] img {
+        aspect-ratio: 2 / 3;
+        object-fit: cover;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+# ==========================================
+# 状態の初期化
+# ==========================================
+_defaults = {
+    "page": "bookshelf",
+    "selected_book": None,
+    "editing_memo_id": None,
+    "confirm_delete_id": None,
+    "confirm_delete_book": False,
+    "flash": "",
+    "books_cache": None,
+    "books_cache_time": 0.0,
+    "search_cache": {},
+    "restored": False,
+}
+for _k, _v in _defaults.items():
+    if _k not in st.session_state:
+        st.session_state[_k] = _v
 
 # ==========================================
 # 共通関数
 # ==========================================
 def fetch_books():
+    """成功: 本のリスト / 失敗: None"""
     try:
         res = requests.get(GAS_URL, params={"action": "getBooks"}, timeout=10, verify=VERIFY_SSL)
-        return res.json()
+        data = res.json()
+        return data if isinstance(data, list) else None
     except Exception:
-        return []
+        return None
+
+def invalidate_books():
+    st.session_state.books_cache = None
+
+def load_books(force=False):
+    """本棚データをキャッシュ付きで取得。戻り値: (本のリスト, 取得成功か)"""
+    cache = st.session_state.get("books_cache")
+    cached_at = st.session_state.get("books_cache_time", 0.0)
+    fresh = cache is not None and (time.time() - cached_at) < BOOKS_CACHE_SECONDS
+    if fresh and not force:
+        return cache, True
+
+    with st.spinner("📚 本棚を読み込み中..."):
+        data = fetch_books()
+    if data is None:
+        # 失敗：古いキャッシュがあればそれを使う
+        return (cache if cache is not None else []), False
+    st.session_state.books_cache = data
+    st.session_state.books_cache_time = time.time()
+    return data, True
 
 def get_field(book, keys, default=""):
     for k in keys:
@@ -141,19 +182,67 @@ def gas_post(payload):
     except Exception as e:
         return False, str(e)
 
+# ---------- 画面遷移（URLに本のIDを持たせて、F5でも戻れるようにする）----------
+def open_book(book):
+    st.session_state.selected_book = book
+    st.session_state.editing_memo_id = None
+    st.session_state.confirm_delete_id = None
+    st.session_state.confirm_delete_book = False
+    st.session_state.page = "detail"
+    bid = get_book_id(book)
+    if bid:
+        try:
+            st.query_params["book"] = bid
+        except Exception:
+            pass
+
+def close_book():
+    st.session_state.page = "bookshelf"
+    st.session_state.selected_book = None
+    st.session_state.editing_memo_id = None
+    st.session_state.confirm_delete_id = None
+    st.session_state.confirm_delete_book = False
+    try:
+        st.query_params.clear()
+    except Exception:
+        pass
+
+def restore_from_url():
+    """F5（再読み込み）しても、開いていた本の画面に戻る"""
+    if st.session_state.restored:
+        return
+    st.session_state.restored = True
+    try:
+        qb = st.query_params.get("book", "")
+    except Exception:
+        return
+    if not qb:
+        return
+    books, _ = load_books()
+    for b in books:
+        if get_book_id(b) == str(qb):
+            st.session_state.selected_book = b
+            st.session_state.page = "detail"
+            return
+    try:
+        st.query_params.clear()
+    except Exception:
+        pass
+
 # ---------- 本・メモ・Insight（GAS連携）----------
 def delete_book(book_id):
     return gas_post({"action": "deleteBook", "bookId": str(book_id)})
 
 def fetch_memos(book_id):
+    """成功: メモのリスト / 失敗: None"""
     try:
         res = requests.get(GAS_URL, params={"action": "getMemos", "bookId": str(book_id)}, timeout=10, verify=VERIFY_SSL)
         if res.status_code != 200:
-            return []
+            return None
         data = res.json()
-        return data if isinstance(data, list) else []
+        return data if isinstance(data, list) else None
     except Exception:
-        return []
+        return None
 
 def add_memo(book_id, memo_text):
     return gas_post({"action": "addMemo", "bookId": str(book_id), "memo": memo_text})
@@ -176,6 +265,25 @@ def fetch_insight(book_id):
 
 def save_insight(book_id, insight_text):
     return gas_post({"action": "saveInsight", "bookId": str(book_id), "insight": insight_text})
+
+def fetch_detail_data(book_id):
+    """メモとInsightを同時に取得。戻り値: (メモ or None, Insight文, 更新日時)"""
+    if USE_BUNDLE_API:
+        try:
+            res = requests.get(GAS_URL, params={"action": "getBookBundle", "bookId": str(book_id)},
+                               timeout=10, verify=VERIFY_SSL)
+            data = res.json()
+            if isinstance(data, dict) and isinstance(data.get("memos"), list):
+                ins = data.get("insight") or {}
+                return data["memos"], (ins.get("insight", "") or ""), (ins.get("updated", "") or "")
+        except Exception:
+            pass
+    with ThreadPoolExecutor(max_workers=2) as ex:
+        f_memos = ex.submit(fetch_memos, book_id)
+        f_ins = ex.submit(fetch_insight, book_id)
+        memos = f_memos.result()
+        text_i, time_i = f_ins.result()
+    return memos, text_i, time_i
 
 # ==========================================
 # 🤖 Gemini呼び出し
@@ -283,7 +391,7 @@ def build_insight_prompt(title, author, summary, memos):
 """
 
 # ==========================================
-# 🌟 書籍データ＆楽天ブックスしらみつぶし検索エンジン
+# 🌟 書籍データ＆表紙の検索エンジン（同時実行で高速化）
 # ==========================================
 def normalize(text):
     text = unicodedata.normalize("NFKC", text or "").lower()
@@ -329,13 +437,26 @@ def image_exists(url):
     except Exception:
         return False
 
+def first_existing(urls, max_workers=8):
+    """URLを優先順に並べて渡すと、実在する最初のURLを返す（確認は同時に実行）"""
+    urls = [u for u in urls if u]
+    if not urls:
+        return ""
+    with ThreadPoolExecutor(max_workers=min(max_workers, len(urls))) as ex:
+        flags = list(ex.map(image_exists, urls))
+    for u, ok in zip(urls, flags):
+        if ok:
+            return u
+    return ""
+
 def lookup_google_books(title, author=""):
     try:
         q = f"intitle:{title}"
         if author:
-            q += f"+inauthor:{author}"
-        url = f"https://www.googleapis.com/books/v1/volumes?q={q}&maxResults=3&langRestrict=ja"
-        res = requests.get(url, timeout=4)
+            q += f" inauthor:{author}"
+        res = requests.get("https://www.googleapis.com/books/v1/volumes",
+                           params={"q": q, "maxResults": 3, "langRestrict": "ja"},
+                           timeout=4, verify=VERIFY_SSL)
         if res.status_code == 200:
             data = res.json()
             for item in data.get("items", []):
@@ -352,7 +473,7 @@ def lookup_google_books(title, author=""):
                     img_url = img_links.get("thumbnail") or img_links.get("smallThumbnail") or ""
                     if img_url.startswith("http:"):
                         img_url = img_url.replace("http:", "https:")
-                    
+
                     return {
                         "isbn": isbn,
                         "imageUrl": img_url,
@@ -428,44 +549,41 @@ def lookup_isbn_ndl(title, author):
     except Exception:
         return ""
 
-def resolve_cover_with_log(isbn, openbd_cover, title="", author=""):
+def resolve_cover_with_log(isbn, openbd_cover, title="", author="", gb_info=None, gb_tried=False):
+    """表紙探し：有力候補をまとめて同時に確認 → ダメなら予備候補 → 最後にGoogle"""
     logs = []
-    
+    suffixes = ["_1_4.jpg", "_1_3.jpg", "_1_2.jpg", "_1.jpg", ".jpg"]
+
     if isbn:
-        dirs_to_check = []
+        # 段階A：楽天（その本自身のフォルダ）→ openBD → 国会図書館
+        stage_a = []
         if len(isbn) >= 13:
-            dirs_to_check.append(isbn[-4:])
-            dirs_to_check.append(isbn[5:9])
-            dirs_to_check.append(isbn[4:8])
-        
-        known_dirs = ["5819", "6362", "6587", "7154", "7324", "7571"]
-        for d in known_dirs:
-            if d not in dirs_to_check:
-                dirs_to_check.append(d)
-
-        suffixes = ["_1_4.jpg", "_1_3.jpg", "_1_2.jpg", "_1.jpg", ".jpg"]
-
-        for d in dirs_to_check:
-            for suf in suffixes:
-                url = f"https://shop.r10s.jp/book/cabinet/{d}/{isbn}{suf}"
-                if image_exists(url):
-                    return url, logs
-
-    if openbd_cover:
-        if image_exists(openbd_cover):
-            return openbd_cover, logs
-
-    if isbn:
-        url = f"https://ndlsearch.ndl.go.jp/thumbnail/{isbn}.jpg"
-        if image_exists(url):
+            stage_a += [f"https://shop.r10s.jp/book/cabinet/{isbn[-4:]}/{isbn}{s}" for s in suffixes]
+        if openbd_cover:
+            stage_a.append(openbd_cover)
+        stage_a.append(f"https://ndlsearch.ndl.go.jp/thumbnail/{isbn}.jpg")
+        url = first_existing(stage_a)
+        if url:
             return url, logs
 
+        # 段階B：予備の楽天フォルダ候補
+        stage_b = []
+        if len(isbn) >= 13:
+            for d in (isbn[5:9], isbn[4:8]):
+                if d != isbn[-4:]:
+                    stage_b += [f"https://shop.r10s.jp/book/cabinet/{d}/{isbn}{s}" for s in suffixes]
+        url = first_existing(stage_b)
+        if url:
+            return url, logs
+    elif openbd_cover and image_exists(openbd_cover):
+        return openbd_cover, logs
+
+    # 段階C：Google Books
     if title:
-        gb_data = lookup_google_books(title, author)
-        if gb_data and gb_data.get("imageUrl"):
-            gb_url = gb_data["imageUrl"]
-            if image_exists(gb_url):
-                return gb_url, logs
+        if gb_info is None and not gb_tried:
+            gb_info = lookup_google_books(title, author)
+        if gb_info and gb_info.get("imageUrl") and image_exists(gb_info["imageUrl"]):
+            return gb_info["imageUrl"], logs
 
     return "", logs
 
@@ -475,29 +593,36 @@ def enrich_candidate(c):
     isbn = ""
     info = None
 
+    # AIのISBN検算＋openBD照合 と NDL探索 を同時に実行
     isbn_ai = to_isbn13(c.get("isbn", ""))
-    if isbn_ai and is_valid_isbn13(isbn_ai):
-        d = openbd_get(isbn_ai)
-        if d and d["title"] and titles_match(title, d["title"]):
-            isbn, info = isbn_ai, d
+    ai_ok = bool(isbn_ai and is_valid_isbn13(isbn_ai))
+    with ThreadPoolExecutor(max_workers=2) as ex:
+        f_bd = ex.submit(openbd_get, isbn_ai) if ai_ok else None
+        f_ndl = ex.submit(lookup_isbn_ndl, title, author)
+        d_ai = f_bd.result() if f_bd else None
+        isbn_ndl = f_ndl.result()
 
-    if not isbn:
-        isbn_ndl = lookup_isbn_ndl(title, author)
-        if isbn_ndl:
-            isbn = isbn_ndl
-            d = openbd_get(isbn_ndl)
-            if d:
-                info = d
+    if d_ai and d_ai["title"] and titles_match(title, d_ai["title"]):
+        isbn, info = isbn_ai, d_ai
+
+    if not isbn and isbn_ndl:
+        isbn = isbn_ndl
+        d = openbd_get(isbn_ndl)
+        if d:
+            info = d
 
     gb_info = None
+    gb_tried = False
     if not isbn or not (info and info.get("cover")):
         gb_info = lookup_google_books(title, author)
+        gb_tried = True
         if gb_info and gb_info.get("isbn") and not isbn:
             isbn = gb_info["isbn"]
 
     verified = bool(isbn)
     openbd_cover = info["cover"] if info else ""
-    cover, cover_logs = resolve_cover_with_log(isbn, openbd_cover, title, author)
+    cover, cover_logs = resolve_cover_with_log(isbn, openbd_cover, title, author,
+                                               gb_info=gb_info, gb_tried=gb_tried)
 
     summary = ""
     if info and info.get("summary"):
@@ -615,13 +740,17 @@ def search_books_ai(keyword):
     return results, "", f"{info} / 書誌・画像データ確認 {n_ok}/{len(results)}冊"
 
 # ==========================================
+# 起動時：URLに本のIDがあれば、その画面を復元
+# ==========================================
+restore_from_url()
+
+# ==========================================
 # 画面構成
 # ==========================================
 if st.session_state.page == "bookshelf":
     # 📚 本棚画面だけに「木目調の棚」のCSSを追加読込する
     st.markdown("""
     <style>
-    /* 🪵 本棚の木目調ブロック（茶色の棚）のスタイル適用 */
     div[data-testid="stHorizontalBlock"] {
         background-color: #C19A6B !important; 
         padding: 20px 10px 15px 10px !important;
@@ -631,28 +760,24 @@ if st.session_state.page == "bookshelf":
         margin-bottom: 25px !important;
     }
 
-    /* 本棚の中の文字（タイトル等）を白にして見やすく */
     div[data-testid="stHorizontalBlock"] p,
     div[data-testid="stHorizontalBlock"] span,
     div[data-testid="stHorizontalBlock"] h1,
     div[data-testid="stHorizontalBlock"] div {
         color: #ffffff !important;
     }
-    
-    /* ⚠️ ただし、本棚の中のボタンの文字は「黒」を死守する */
+
     div[data-testid="stHorizontalBlock"] button * {
         color: #2c2c2c !important;
     }
 
-    /* 🔍 エクスパンダー（検索結果など）の背景は木目にしない */
     div[data-testid="stExpander"] div[data-testid="stHorizontalBlock"] {
         background-color: transparent !important;
         border: none !important;
         box-shadow: none !important;
         padding: 0 !important;
     }
-    
-    /* 検索結果の文字は黒に戻す */
+
     div[data-testid="stExpander"] div[data-testid="stHorizontalBlock"] p,
     div[data-testid="stExpander"] div[data-testid="stHorizontalBlock"] span {
         color: #2c2c2c !important;
@@ -660,29 +785,67 @@ if st.session_state.page == "bookshelf":
     </style>
     """, unsafe_allow_html=True)
 
+    if ENABLE_DESIGN_TWEAKS:
+        st.markdown("""
+        <style>
+        /* 棚板にほんのりグラデーション */
+        div[data-testid="stHorizontalBlock"] {
+            background-image: linear-gradient(180deg, #CFA877 0%, #C19A6B 55%, #B58A57 100%) !important;
+        }
+        div[data-testid="stExpander"] div[data-testid="stHorizontalBlock"] {
+            background-image: none !important;
+        }
+        /* 本のタイトルは2行まで（棚の高さをそろえる） */
+        .book-title {
+            font-size: 0.85rem;
+            font-weight: 700;
+            line-height: 1.35;
+            height: 2.7em;
+            overflow: hidden;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            margin: 6px 0 6px 0;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
     st.title("📚 わたしの本棚")
+
+    # 本棚データ（キャッシュ使用）
+    books, books_ok = load_books()
+    shelf_keys = {normalize(get_field(b, ["タイトル"])) for b in books if isinstance(b, dict)}
 
     # ① デフォルトで閉じる
     with st.expander("➕ AI書店員に本を探してもらう", expanded=False):
-        # ② 説明文削除
-        # ③ プレースホルダ変更
-        search_keyword = st.text_input("本のタイトル・著者",
-                                       placeholder="例：嫌われる勇気 / 付加価値のつくりかた / シン・営業力")
-        if st.button("🔍 AIに候補を探してもらう"):
-            if search_keyword.strip():
-                # ⑤ スピナー文言変更
-                with st.spinner("AIが本を探しに行っています。"):
-                    results, err_msg, info = search_books_ai(search_keyword.strip())
-                    st.session_state.search_results = results
-                    st.session_state.search_error = err_msg
-                    st.session_state.search_info = info
+        # Enterキーでも検索できるようにフォーム化
+        with st.form("search_form", clear_on_submit=False):
+            search_keyword = st.text_input("本のタイトル・著者",
+                                           placeholder="例：嫌われる勇気 / 付加価値のつくりかた / シン・営業力")
+            search_submitted = st.form_submit_button("🔍 AIに候補を探してもらう")
+
+        if search_submitted:
+            kw = search_keyword.strip()
+            if kw:
+                cache_key = normalize(kw)
+                cached = st.session_state.search_cache.get(cache_key)
+                if cached:
+                    results, err_msg, info = cached
+                    info = (info + " / キャッシュ") if info else "キャッシュ"
+                else:
+                    with st.spinner("AIが本を探しに行っています。"):
+                        results, err_msg, info = search_books_ai(kw)
+                    if results and not err_msg:
+                        st.session_state.search_cache[cache_key] = (results, err_msg, info)
+                st.session_state.search_results = results
+                st.session_state.search_error = err_msg
+                st.session_state.search_info = info
             else:
                 st.warning("検索キーワードを入力してね。")
 
         if "search_results" in st.session_state:
             results = st.session_state.search_results
             err_msg = st.session_state.get("search_error", "")
-            info = st.session_state.get("search_info", "")
 
             if results:
                 st.write("---")
@@ -695,7 +858,10 @@ if st.session_state.page == "bookshelf":
                             st.image(book["imageUrl"], width=100)
                             st.markdown(f"**{book['title']}**")
                             st.write(f"✍️ {book['author']}")
-                            
+
+                            if normalize(book["title"]) in shelf_keys:
+                                st.caption("📚 すでに本棚にあるよ")
+
                             if book["summary"]:
                                 s = book["summary"]
                                 st.caption(s[:100] + "..." if len(s) > 100 else s)
@@ -705,8 +871,6 @@ if st.session_state.page == "bookshelf":
                                 custom_img = st.text_input("🖼️ 表紙画像のURL（任意）",
                                                            key=f"img_{idx}",
                                                            placeholder="空欄なら「画像なし」で登録")
-                                                           
-                            # ⑥ プロセスログ表示削除
 
                             if st.button("✅ この本を本棚に追加", key=f"add_book_{idx}"):
                                 payload = {
@@ -719,6 +883,7 @@ if st.session_state.page == "bookshelf":
                                 with st.spinner("スプレッドシートに追加中..."):
                                     ok, err = gas_post(payload)
                                 if ok:
+                                    invalidate_books()
                                     st.session_state.flash = f"「{book['title']}」を本棚に追加したよ！"
                                     del st.session_state.search_results
                                     st.rerun()
@@ -747,6 +912,7 @@ if st.session_state.page == "bookshelf":
                             "summary": manual_summary.strip() or "概要なし",
                         })
                         if ok:
+                            invalidate_books()
                             st.session_state.flash = f"「{manual_title.strip()}」を手動で追加したよ！"
                             if "search_results" in st.session_state:
                                 del st.session_state.search_results
@@ -765,16 +931,41 @@ if st.session_state.page == "bookshelf":
     # ==========================================
     # 📚 本棚リストの表示
     # ==========================================
-    books = fetch_books()
+    if not books_ok and not books:
+        st.warning("本棚の取得に失敗したよ。下の「🔄 本棚を更新」でもう一度試してね。")
+    elif not books_ok:
+        st.warning("最新の本棚を取得できなかったので、前回の表示を出しているよ。")
+
     if isinstance(books, list) and len(books) > 0:
+        st.caption(f"📚 {len(books)}冊")
+
+        view_books = list(books)
+        filter_text = st.text_input("🔎 本棚の中を絞り込み", key="shelf_filter",
+                                    placeholder="タイトルや著者の一部")
+        sort_mode = st.radio("並び順", ["追加順", "新しい順", "タイトル順"],
+                             horizontal=True, key="shelf_sort")
+
+        if filter_text.strip():
+            nq = normalize(filter_text)
+            view_books = [
+                b for b in view_books
+                if nq in normalize(get_field(b, ["タイトル"]) + get_field(b, ["著者", "著者名", "作者"]))
+            ]
+        if sort_mode == "新しい順":
+            view_books.reverse()
+        elif sort_mode == "タイトル順":
+            view_books.sort(key=lambda b: normalize(get_field(b, ["タイトル"])))
+
+        if not view_books:
+            st.info("条件に合う本が見つからなかったよ。")
+
         # ⑦ 本の隙間を詰めて、5列で並べる。超えたら下の段へ自動追加
         cols_per_row = 5
-        for i in range(0, len(books), cols_per_row):
-            # gap="small" で隙間を詰める
+        for i in range(0, len(view_books), cols_per_row):
             cols = st.columns(cols_per_row, gap="small")
             for j in range(cols_per_row):
-                if i + j < len(books):
-                    book = books[i + j]
+                if i + j < len(view_books):
+                    book = view_books[i + j]
                     with cols[j]:
                         img_url = str(book.get("画像URL", "") or "").strip()
                         if img_url.startswith("http"):
@@ -782,16 +973,22 @@ if st.session_state.page == "bookshelf":
                         else:
                             st.image(PLACEHOLDER_IMG, width=120)
 
-                        st.write(f"**{book.get('タイトル', 'タイトル不明')}**")
+                        book_title = book.get("タイトル", "タイトル不明")
+                        if ENABLE_DESIGN_TWEAKS:
+                            st.markdown(f"<div class='book-title'>{html.escape(str(book_title))}</div>",
+                                        unsafe_allow_html=True)
+                        else:
+                            st.write(f"**{book_title}**")
+
                         if st.button("詳細・メモ", key=f"btn_{get_book_id(book) or i}_{j}"):
-                            st.session_state.selected_book = book
-                            st.session_state.editing_memo_id = None
-                            st.session_state.confirm_delete_id = None
-                            st.session_state.confirm_delete_book = False
-                            st.session_state.page = "detail"
+                            open_book(book)
                             st.rerun()
-    else:
-        st.info("まだ本棚に本がないよ。上の検索欄から本を探して追加してみよう！")
+    elif books_ok:
+        st.info("まだ本棚に本がないよ。上の「➕ AI書店員に本を探してもらう」から追加してみよう！")
+
+    if st.button("🔄 本棚を更新"):
+        invalidate_books()
+        st.rerun()
 
 # ==========================================
 # 📖 詳細・メモ画面
@@ -804,11 +1001,7 @@ elif st.session_state.page == "detail":
     summary = get_field(book, ["概要", "あらすじ", "サマリー"], "")
 
     if st.button("⬅️ 本棚に戻る"):
-        st.session_state.page = "bookshelf"
-        st.session_state.selected_book = None
-        st.session_state.editing_memo_id = None
-        st.session_state.confirm_delete_id = None
-        st.session_state.confirm_delete_book = False
+        close_book()
         st.rerun()
 
     memo_key = f"memos_{book_id}"
@@ -816,15 +1009,29 @@ elif st.session_state.page == "detail":
     insight_time_key = f"insight_time_{book_id}"
     show_key = f"show_insight_{book_id}"
 
-    if memo_key not in st.session_state:
-        st.session_state[memo_key] = fetch_memos(book_id)
-    if insight_key not in st.session_state:
-        text_i, time_i = fetch_insight(book_id)
-        st.session_state[insight_key] = text_i
-        st.session_state[insight_time_key] = time_i
+    # メモとInsightは、足りないものだけを同時に取得
+    need_memos = memo_key not in st.session_state
+    need_insight = insight_key not in st.session_state
+    if need_memos or need_insight:
+        with st.spinner("読み込み中..."):
+            m_new, ti_new, tt_new = None, None, None
+            if need_memos and need_insight:
+                m_new, ti_new, tt_new = fetch_detail_data(book_id)
+            elif need_memos:
+                m_new = fetch_memos(book_id)
+            else:
+                ti_new, tt_new = fetch_insight(book_id)
+        if need_memos and m_new is not None:
+            st.session_state[memo_key] = m_new
+        if need_insight and ti_new is not None:
+            st.session_state[insight_key] = ti_new
+            st.session_state[insight_time_key] = tt_new
 
-    memos = st.session_state[memo_key]
-    insight_text = st.session_state[insight_key]
+    memos = st.session_state.get(memo_key)
+    if memos is None:
+        memos = []
+        st.warning("メモの取得に失敗したよ。「🔄 最新の状態に更新」でもう一度試してね。")
+    insight_text = st.session_state.get(insight_key, "")
 
     if st.session_state.flash:
         st.success(st.session_state.flash)
@@ -881,7 +1088,7 @@ elif st.session_state.page == "detail":
         if memo_text.strip():
             ok, err = add_memo(book_id, memo_text.strip())
             if ok:
-                st.session_state.pop(memo_key, None)
+                st.session_state.pop(memo_key, None)  # 新しいメモのIDを取るため再取得
                 st.session_state.flash = "メモを保存したよ！"
                 st.rerun()
             else:
@@ -890,6 +1097,12 @@ elif st.session_state.page == "detail":
             st.warning("メモが空だよ。")
 
     st.markdown(f"##### 🗂️ メモ一覧（{len(memos)}件）")
+    if st.button("🔄 最新の状態に更新", key="refresh_detail"):
+        st.session_state.pop(memo_key, None)
+        st.session_state.pop(insight_key, None)
+        st.session_state.pop(insight_time_key, None)
+        st.rerun()
+
     if memos:
         for m in reversed(memos):
             memo_id = str(m.get("メモID", ""))
@@ -904,7 +1117,10 @@ elif st.session_state.page == "detail":
                             if edited.strip():
                                 ok, err = update_memo(memo_id, edited.strip())
                                 if ok:
-                                    st.session_state.pop(memo_key, None)
+                                    # 再取得せず、画面側のデータを直接更新（速い）
+                                    for x in memos:
+                                        if str(x.get("メモID", "")) == memo_id:
+                                            x["メモ"] = edited.strip()
                                     st.session_state.editing_memo_id = None
                                     st.session_state.flash = "メモを更新したよ！"
                                     st.rerun()
@@ -919,13 +1135,16 @@ elif st.session_state.page == "detail":
 
                 elif st.session_state.confirm_delete_id == memo_id:
                     st.write(m.get("メモ", ""))
-                    st.warning("This memo will be deleted. (Cannot be undone)")
+                    st.warning("このメモを削除しますか？（元に戻せません）")
                     c1, c2, _ = st.columns([1, 1, 4])
                     with c1:
                         if st.button("はい", key=f"yes_{memo_id}", type="primary"):
                             ok, err = delete_memo(memo_id)
                             if ok:
-                                st.session_state.pop(memo_key, None)
+                                # 再取得せず、画面側のデータから外す（速い）
+                                st.session_state[memo_key] = [
+                                    x for x in memos if str(x.get("メモID", "")) != memo_id
+                                ]
                                 st.session_state.confirm_delete_id = None
                                 st.session_state.flash = "メモを削除したよ。"
                                 st.rerun()
@@ -951,30 +1170,29 @@ elif st.session_state.page == "detail":
                             st.rerun()
     else:
         st.info("まだメモがないよ。最初の気づきを書いてみよう！")
-        
-    # ⑧ 画面の一番下に本削除ボタンを配置
+
+    # ⑧ 画面の一番下に本削除（誤タップ防止のため折りたたみ内）
     st.divider()
-    st.markdown("### ⚙️ 管理")
-    if st.session_state.get("confirm_delete_book"):
-        st.warning("⚠️ 本当にこの本を削除しますか？（本データ・メモ・Insight全て削除されます）")
-        c1, c2 = st.columns([1, 4])
-        with c1:
-            if st.button("はい、削除します", type="primary"):
-                with st.spinner("削除中..."):
-                    ok, err = delete_book(book_id)
-                if ok:
-                    st.session_state.page = "bookshelf"
-                    st.session_state.selected_book = None
+    with st.expander("⚙️ 管理（本の削除）", expanded=bool(st.session_state.get("confirm_delete_book"))):
+        if st.session_state.get("confirm_delete_book"):
+            st.warning("⚠️ 本当にこの本を削除しますか？（本データ・メモ・Insight全て削除されます）")
+            c1, c2 = st.columns([1, 4])
+            with c1:
+                if st.button("はい、削除します", type="primary"):
+                    with st.spinner("削除中..."):
+                        ok, err = delete_book(book_id)
+                    if ok:
+                        invalidate_books()
+                        close_book()
+                        st.session_state.flash = f"「{title}」を本棚から削除したよ。"
+                        st.rerun()
+                    else:
+                        st.error(f"削除に失敗したよ: {err}")
+            with c2:
+                if st.button("キャンセル"):
                     st.session_state.confirm_delete_book = False
-                    st.session_state.flash = f"「{title}」を本棚から削除したよ。"
                     st.rerun()
-                else:
-                    st.error(f"削除に失敗したよ: {err}")
-        with c2:
-            if st.button("キャンセル"):
-                st.session_state.confirm_delete_book = False
+        else:
+            if st.button("🗑️ この本を本棚から削除する"):
+                st.session_state.confirm_delete_book = True
                 st.rerun()
-    else:
-        if st.button("🗑️ この本を本棚から削除する"):
-            st.session_state.confirm_delete_book = True
-            st.rerun()
