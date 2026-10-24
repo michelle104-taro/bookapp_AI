@@ -46,45 +46,33 @@ GEMINI_PER_TRY_TIMEOUT = 25
 GEMINI_TOTAL_BUDGET = 40
 
 # ==========================================
-# 🎨 CSSデザイン（本棚復活＆文字・ボタンくっきり保護）
+# 🎨 ベースCSS（アプリ全体の文字色・ボタン保護）
 # ==========================================
 st.markdown("""
 <style>
 /* アプリ全体の背景と基本の文字色 */
 .stApp {
     background-color: #f9f6f0 !important;
+}
+
+/* 基本の文字色を強制的に黒（ダークモードでの白飛び防止） */
+p, span, label, h1, h2, h3, h4, h5, h6, li, div {
     color: #2c2c2c !important;
 }
 
-/* 全体の通常のテキストやラベルはくっきり黒に固定 */
-p, span, label, div {
+/* 🔘 すべてのボタンの配色を強制固定（背景と同化させない） */
+button[kind="secondary"] {
+    background-color: #ffffff !important;
+    border: 1px solid #cccccc !important;
+}
+button[kind="secondary"] * {
     color: #2c2c2c !important;
 }
-
-/* 🪵 本棚の木目調ブロック（茶色の棚）の復活とスタイル適用 */
-div[data-testid="stHorizontalBlock"] {
-    background-color: #C19A6B !important; 
-    padding: 20px 10px 15px 10px;
-    border-bottom: 12px solid #8B5A2B; 
-    box-shadow: inset 0px -10px 15px rgba(0,0,0,0.15), 0px 5px 10px rgba(0,0,0,0.2);
-    border-radius: 3px;
-    margin-bottom: 25px;
+button[kind="primary"] {
+    background-color: #ff4b4b !important;
+    border: 1px solid #ff4b4b !important;
 }
-
-/* 本棚（茶色ブロック）の中の文字をくっきり白にして見やすく指定 */
-div[data-testid="stHorizontalBlock"] p,
-div[data-testid="stHorizontalBlock"] span,
-div[data-testid="stHorizontalBlock"] div {
-    color: #ffffff !important;
-}
-
-/* 🔘 ボタンの色や文字が背景と同化しないよう保護 */
-button, button p, button span, button div {
-    color: #2c2c2c !important;
-}
-
-/* プライマリボタン（Insight等）の文字色保護 */
-button[kind="primary"], button[kind="primary"] p, button[kind="primary"] span {
+button[kind="primary"] * {
     color: #ffffff !important;
 }
 
@@ -92,22 +80,6 @@ button[kind="primary"], button[kind="primary"] p, button[kind="primary"] span {
 div[data-testid="stImage"] img {
     box-shadow: 5px 5px 10px rgba(0,0,0,0.4);
     border-radius: 2px;
-}
-
-/* エクスパンダー内および詳細画面の水平ブロックの背景リセット（茶色にならないように） */
-div[data-testid="stExpander"] div[data-testid="stHorizontalBlock"],
-.detail-clean div[data-testid="stHorizontalBlock"] {
-    background-color: transparent !important;
-    border-bottom: none !important;
-    box-shadow: none !important;
-    padding: 0 !important;
-    margin-bottom: 0.3rem !important;
-}
-div[data-testid="stExpander"] div[data-testid="stHorizontalBlock"] p,
-div[data-testid="stExpander"] div[data-testid="stHorizontalBlock"] span,
-.detail-clean div[data-testid="stHorizontalBlock"] p,
-.detail-clean div[data-testid="stHorizontalBlock"] span {
-    color: #2c2c2c !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -653,6 +625,48 @@ def search_books_ai(keyword):
 # 画面構成
 # ==========================================
 if st.session_state.page == "bookshelf":
+    # 📚 本棚画面だけに「木目調の棚」のCSSを追加読込する
+    st.markdown("""
+    <style>
+    /* 🪵 本棚の木目調ブロック（茶色の棚）のスタイル適用 */
+    div[data-testid="stHorizontalBlock"] {
+        background-color: #C19A6B !important; 
+        padding: 20px 10px 15px 10px !important;
+        border-bottom: 12px solid #8B5A2B !important; 
+        box-shadow: inset 0px -10px 15px rgba(0,0,0,0.15), 0px 5px 10px rgba(0,0,0,0.2) !important;
+        border-radius: 3px !important;
+        margin-bottom: 25px !important;
+    }
+
+    /* 本棚の中の文字（タイトル等）を白にして見やすく */
+    div[data-testid="stHorizontalBlock"] p,
+    div[data-testid="stHorizontalBlock"] span,
+    div[data-testid="stHorizontalBlock"] h1,
+    div[data-testid="stHorizontalBlock"] div {
+        color: #ffffff !important;
+    }
+    
+    /* ⚠️ ただし、本棚の中のボタンの文字は「黒」を死守する */
+    div[data-testid="stHorizontalBlock"] button * {
+        color: #2c2c2c !important;
+    }
+
+    /* 🔍 エクスパンダー（検索結果など）の背景は木目にしない */
+    div[data-testid="stExpander"] div[data-testid="stHorizontalBlock"] {
+        background-color: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+    }
+    
+    /* 検索結果の文字は黒に戻す */
+    div[data-testid="stExpander"] div[data-testid="stHorizontalBlock"] p,
+    div[data-testid="stExpander"] div[data-testid="stHorizontalBlock"] span {
+        color: #2c2c2c !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
     st.title("📚 わたしの本棚")
 
     with st.expander("➕ AI書店員に本を探してもらう", expanded=True):
@@ -757,7 +771,7 @@ if st.session_state.page == "bookshelf":
     st.write("---")
 
     # ==========================================
-    # 📚 本棚リストの表示（木目調棚ブロック）
+    # 📚 本棚リストの表示
     # ==========================================
     books = fetch_books()
     if isinstance(books, list) and len(books) > 0:
@@ -793,8 +807,6 @@ elif st.session_state.page == "detail":
     title = get_field(book, ["タイトル"], "タイトル不明")
     author = get_field(book, ["著者", "著者名", "作者"], "著者不明")
     summary = get_field(book, ["概要", "あらすじ", "サマリー"], "")
-
-    st.markdown('<div class="detail-clean">', unsafe_allow_html=True)
 
     if st.button("⬅️ 本棚に戻る"):
         st.session_state.page = "bookshelf"
@@ -946,5 +958,3 @@ elif st.session_state.page == "detail":
                             st.rerun()
     else:
         st.info("まだメモがないよ。最初の気づきを書いてみよう！")
-
-    st.markdown('</div>', unsafe_allow_html=True)
