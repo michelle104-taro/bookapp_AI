@@ -46,7 +46,7 @@ GEMINI_PER_TRY_TIMEOUT = 25
 GEMINI_TOTAL_BUDGET = 40
 
 # ==========================================
-# 🎨 CSSデザイン（表示崩れ・文字同化 徹底対策版）
+# 🎨 CSSデザイン（本棚復活＆文字・ボタンくっきり保護）
 # ==========================================
 st.markdown("""
 <style>
@@ -61,8 +61,8 @@ p, span, label, div {
     color: #2c2c2c !important;
 }
 
-/* 本棚の木目調ブロック（リスト一覧の上部など）専用のスタイル */
-div[data-testid="stHorizontalBlock"].bookshelf-shelf {
+/* 🪵 本棚の木目調ブロック（茶色の棚）の復活とスタイル適用 */
+div[data-testid="stHorizontalBlock"] {
     background-color: #C19A6B !important; 
     padding: 20px 10px 15px 10px;
     border-bottom: 12px solid #8B5A2B; 
@@ -71,10 +71,43 @@ div[data-testid="stHorizontalBlock"].bookshelf-shelf {
     margin-bottom: 25px;
 }
 
+/* 本棚（茶色ブロック）の中の文字をくっきり白にして見やすく指定 */
+div[data-testid="stHorizontalBlock"] p,
+div[data-testid="stHorizontalBlock"] span,
+div[data-testid="stHorizontalBlock"] div {
+    color: #ffffff !important;
+}
+
+/* 🔘 ボタンの色や文字が背景と同化しないよう保護 */
+button, button p, button span, button div {
+    color: #2c2c2c !important;
+}
+
+/* プライマリボタン（Insight等）の文字色保護 */
+button[kind="primary"], button[kind="primary"] p, button[kind="primary"] span {
+    color: #ffffff !important;
+}
+
 /* 表紙画像の影と角丸 */
 div[data-testid="stImage"] img {
     box-shadow: 5px 5px 10px rgba(0,0,0,0.4);
     border-radius: 2px;
+}
+
+/* エクスパンダー内および詳細画面の水平ブロックの背景リセット（茶色にならないように） */
+div[data-testid="stExpander"] div[data-testid="stHorizontalBlock"],
+.detail-clean div[data-testid="stHorizontalBlock"] {
+    background-color: transparent !important;
+    border-bottom: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin-bottom: 0.3rem !important;
+}
+div[data-testid="stExpander"] div[data-testid="stHorizontalBlock"] p,
+div[data-testid="stExpander"] div[data-testid="stHorizontalBlock"] span,
+.detail-clean div[data-testid="stHorizontalBlock"] p,
+.detail-clean div[data-testid="stHorizontalBlock"] span {
+    color: #2c2c2c !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -724,34 +757,30 @@ if st.session_state.page == "bookshelf":
     st.write("---")
 
     # ==========================================
-    # 📚 本棚リストの表示
+    # 📚 本棚リストの表示（木目調棚ブロック）
     # ==========================================
     books = fetch_books()
     if isinstance(books, list) and len(books) > 0:
         cols_per_row = 4
         for i in range(0, len(books), cols_per_row):
-            # 木目調棚のデザインを適用するコンテナ
-            with st.container():
-                st.markdown('<div class="bookshelf-shelf">', unsafe_allow_html=True)
-                cols = st.columns(cols_per_row)
-                for j in range(cols_per_row):
-                    if i + j < len(books):
-                        book = books[i + j]
-                        with cols[j]:
-                            img_url = str(book.get("画像URL", "") or "").strip()
-                            if img_url.startswith("http"):
-                                st.image(img_url, width=120)
-                            else:
-                                st.image(PLACEHOLDER_IMG, width=120)
+            cols = st.columns(cols_per_row)
+            for j in range(cols_per_row):
+                if i + j < len(books):
+                    book = books[i + j]
+                    with cols[j]:
+                        img_url = str(book.get("画像URL", "") or "").strip()
+                        if img_url.startswith("http"):
+                            st.image(img_url, width=120)
+                        else:
+                            st.image(PLACEHOLDER_IMG, width=120)
 
-                            st.write(f"**{book.get('タイトル', 'タイトル不明')}**")
-                            if st.button("詳細・メモ", key=f"btn_{get_book_id(book) or i}_{j}"):
-                                st.session_state.selected_book = book
-                                st.session_state.editing_memo_id = None
-                                st.session_state.confirm_delete_id = None
-                                st.session_state.page = "detail"
-                                st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
+                        st.write(f"**{book.get('タイトル', 'タイトル不明')}**")
+                        if st.button("詳細・メモ", key=f"btn_{get_book_id(book) or i}_{j}"):
+                            st.session_state.selected_book = book
+                            st.session_state.editing_memo_id = None
+                            st.session_state.confirm_delete_id = None
+                            st.session_state.page = "detail"
+                            st.rerun()
     else:
         st.info("まだ本棚に本がないよ。上の検索欄から本を探して追加してみよう！")
 
@@ -764,6 +793,8 @@ elif st.session_state.page == "detail":
     title = get_field(book, ["タイトル"], "タイトル不明")
     author = get_field(book, ["著者", "著者名", "作者"], "著者不明")
     summary = get_field(book, ["概要", "あらすじ", "サマリー"], "")
+
+    st.markdown('<div class="detail-clean">', unsafe_allow_html=True)
 
     if st.button("⬅️ 本棚に戻る"):
         st.session_state.page = "bookshelf"
@@ -915,3 +946,5 @@ elif st.session_state.page == "detail":
                             st.rerun()
     else:
         st.info("まだメモがないよ。最初の気づきを書いてみよう！")
+
+    st.markdown('</div>', unsafe_allow_html=True)
