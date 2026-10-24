@@ -46,23 +46,23 @@ GEMINI_PER_TRY_TIMEOUT = 25
 GEMINI_TOTAL_BUDGET = 40
 
 # ==========================================
-# 🎨 CSSデザイン（スマホの文字消え・白文字化対策・完全版）
+# 🎨 CSSデザイン（表示崩れ・文字同化 徹底対策版）
 # ==========================================
 st.markdown("""
 <style>
-/* アプリ全体の背景と文字色を強制指定（ダークモード反転を防ぐ） */
+/* アプリ全体の背景と基本の文字色 */
 .stApp {
     background-color: #f9f6f0 !important;
     color: #2c2c2c !important;
 }
 
-/* タイトルや見出し、通常のテキストの文字色をくっきり黒に固定 */
-h1, h2, h3, h4, h5, h6, p, span, label, div {
+/* 全体の通常のテキストやラベルはくっきり黒に固定 */
+p, span, label, div {
     color: #2c2c2c !important;
 }
 
-/* 本棚のヘッダーブロックのデザイン */
-div[data-testid="stHorizontalBlock"] {
+/* 本棚の木目調ブロック（リスト一覧の上部など）専用のスタイル */
+div[data-testid="stHorizontalBlock"].bookshelf-shelf {
     background-color: #C19A6B !important; 
     padding: 20px 10px 15px 10px;
     border-bottom: 12px solid #8B5A2B; 
@@ -71,24 +71,10 @@ div[data-testid="stHorizontalBlock"] {
     margin-bottom: 25px;
 }
 
-/* ヘッダーブロック内の文字は白で見やすくする */
-div[data-testid="stHorizontalBlock"] h1, 
-div[data-testid="stHorizontalBlock"] span, 
-div[data-testid="stHorizontalBlock"] p {
-    color: #ffffff !important;
-}
-
 /* 表紙画像の影と角丸 */
 div[data-testid="stImage"] img {
     box-shadow: 5px 5px 10px rgba(0,0,0,0.4);
     border-radius: 2px;
-}
-
-/* エクスパンダー内の背景調整 */
-div[data-testid="stExpander"] div[data-testid="stHorizontalBlock"] {
-    background-color: transparent !important;
-    border-bottom: none;
-    box-shadow: none;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -744,24 +730,28 @@ if st.session_state.page == "bookshelf":
     if isinstance(books, list) and len(books) > 0:
         cols_per_row = 4
         for i in range(0, len(books), cols_per_row):
-            cols = st.columns(cols_per_row)
-            for j in range(cols_per_row):
-                if i + j < len(books):
-                    book = books[i + j]
-                    with cols[j]:
-                        img_url = str(book.get("画像URL", "") or "").strip()
-                        if img_url.startswith("http"):
-                            st.image(img_url, width=120)
-                        else:
-                            st.image(PLACEHOLDER_IMG, width=120)
+            # 木目調棚のデザインを適用するコンテナ
+            with st.container():
+                st.markdown('<div class="bookshelf-shelf">', unsafe_allow_html=True)
+                cols = st.columns(cols_per_row)
+                for j in range(cols_per_row):
+                    if i + j < len(books):
+                        book = books[i + j]
+                        with cols[j]:
+                            img_url = str(book.get("画像URL", "") or "").strip()
+                            if img_url.startswith("http"):
+                                st.image(img_url, width=120)
+                            else:
+                                st.image(PLACEHOLDER_IMG, width=120)
 
-                        st.write(f"**{book.get('タイトル', 'タイトル不明')}**")
-                        if st.button("詳細・メモ", key=f"btn_{get_book_id(book) or i}_{j}"):
-                            st.session_state.selected_book = book
-                            st.session_state.editing_memo_id = None
-                            st.session_state.confirm_delete_id = None
-                            st.session_state.page = "detail"
-                            st.rerun()
+                            st.write(f"**{book.get('タイトル', 'タイトル不明')}**")
+                            if st.button("詳細・メモ", key=f"btn_{get_book_id(book) or i}_{j}"):
+                                st.session_state.selected_book = book
+                                st.session_state.editing_memo_id = None
+                                st.session_state.confirm_delete_id = None
+                                st.session_state.page = "detail"
+                                st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
     else:
         st.info("まだ本棚に本がないよ。上の検索欄から本を探して追加してみよう！")
 
@@ -774,19 +764,6 @@ elif st.session_state.page == "detail":
     title = get_field(book, ["タイトル"], "タイトル不明")
     author = get_field(book, ["著者", "著者名", "作者"], "著者不明")
     summary = get_field(book, ["概要", "あらすじ", "サマリー"], "")
-
-    st.markdown("""
-    <style>
-    div[data-testid="stHorizontalBlock"] {
-        background-color: transparent;
-        border-bottom: none;
-        box-shadow: none;
-        padding: 0;
-        margin-bottom: 0.3rem;
-        border-radius: 0;
-    }
-    </style>
-    """, unsafe_allow_html=True)
 
     if st.button("⬅️ 本棚に戻る"):
         st.session_state.page = "bookshelf"
