@@ -142,7 +142,6 @@ def load_books(force=False):
     with st.spinner("📚 本棚を読み込み中..."):
         data = fetch_books()
     if data is None:
-        # 失敗：古いキャッシュがあればそれを使う
         return (cache if cache is not None else []), False
     st.session_state.books_cache = data
     st.session_state.books_cache_time = time.time()
@@ -438,7 +437,6 @@ def image_exists(url):
         return False
 
 def first_existing(urls, max_workers=8):
-    """URLを優先順に並べて渡すと、実在する最初のURLを返す（確認は同時に実行）"""
     urls = [u for u in urls if u]
     if not urls:
         return ""
@@ -550,12 +548,10 @@ def lookup_isbn_ndl(title, author):
         return ""
 
 def resolve_cover_with_log(isbn, openbd_cover, title="", author="", gb_info=None, gb_tried=False):
-    """表紙探し：有力候補をまとめて同時に確認 → ダメなら予備候補 → 最後にGoogle"""
     logs = []
     suffixes = ["_1_4.jpg", "_1_3.jpg", "_1_2.jpg", "_1.jpg", ".jpg"]
 
     if isbn:
-        # 段階A：楽天（その本自身のフォルダ）→ openBD → 国会図書館
         stage_a = []
         if len(isbn) >= 13:
             stage_a += [f"https://shop.r10s.jp/book/cabinet/{isbn[-4:]}/{isbn}{s}" for s in suffixes]
@@ -566,7 +562,6 @@ def resolve_cover_with_log(isbn, openbd_cover, title="", author="", gb_info=None
         if url:
             return url, logs
 
-        # 段階B：予備の楽天フォルダ候補
         stage_b = []
         if len(isbn) >= 13:
             for d in (isbn[5:9], isbn[4:8]):
@@ -578,7 +573,6 @@ def resolve_cover_with_log(isbn, openbd_cover, title="", author="", gb_info=None
     elif openbd_cover and image_exists(openbd_cover):
         return openbd_cover, logs
 
-    # 段階C：Google Books
     if title:
         if gb_info is None and not gb_tried:
             gb_info = lookup_google_books(title, author)
@@ -593,7 +587,6 @@ def enrich_candidate(c):
     isbn = ""
     info = None
 
-    # AIのISBN検算＋openBD照合 と NDL探索 を同時に実行
     isbn_ai = to_isbn13(c.get("isbn", ""))
     ai_ok = bool(isbn_ai and is_valid_isbn13(isbn_ai))
     with ThreadPoolExecutor(max_workers=2) as ex:
@@ -751,6 +744,7 @@ if st.session_state.page == "bookshelf":
     # 📚 本棚画面だけに「木目調の棚」のCSSを追加読込する
     st.markdown("""
     <style>
+    /* 本棚の木目スタイル */
     div[data-testid="stHorizontalBlock"] {
         background-color: #C19A6B !important; 
         padding: 20px 10px 15px 10px !important;
@@ -783,26 +777,34 @@ if st.session_state.page == "bookshelf":
         color: #2c2c2c !important;
     }
 
-    /* 📱 スマホ(iPhone等)対応：本棚のブロックを横2列（折り返し）にする */
+    /* 📱 スマホ(iPhone等)強制的レイアウト調整 */
     @media (max-width: 768px) {
-        div[data-testid="stHorizontalBlock"] {
+        /* Streamlitのデフォルトの1列縦並び強制を上書きし、横並び（wrap可）にする */
+        div[data-testid="stHorizontalBlock"]:not(.element-container *) {
+            display: flex !important;
             flex-direction: row !important;
             flex-wrap: wrap !important;
         }
-        div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-            min-width: calc(45% - 5px) !important;
-            width: calc(45% - 5px) !important;
-            flex: 1 1 calc(45% - 5px) !important;
+        /* 各カラムを幅48%にして2列に強制配置 */
+        div[data-testid="stHorizontalBlock"]:not(.element-container *) > div[data-testid="column"],
+        div[data-testid="stHorizontalBlock"]:not(.element-container *) > div[data-testid="stColumn"] {
+            width: 48% !important;
+            min-width: 48% !important;
+            max-width: 48% !important;
+            flex: 1 1 48% !important;
+            margin-bottom: 15px !important;
         }
-        /* エクスパンダーの中（AI検索結果など）はデフォルトの縦並びに戻す */
+        
+        /* エクスパンダー内（検索結果）は1列に戻す */
         div[data-testid="stExpander"] div[data-testid="stHorizontalBlock"] {
+            display: flex !important;
             flex-direction: column !important;
-            flex-wrap: nowrap !important;
         }
-        div[data-testid="stExpander"] div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-            min-width: 100% !important;
+        div[data-testid="stExpander"] div[data-testid="stHorizontalBlock"] > div[data-testid="column"],
+        div[data-testid="stExpander"] div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] {
             width: 100% !important;
-            flex: 1 1 100% !important;
+            min-width: 100% !important;
+            max-width: 100% !important;
         }
     }
     </style>
@@ -811,14 +813,14 @@ if st.session_state.page == "bookshelf":
     if ENABLE_DESIGN_TWEAKS:
         st.markdown("""
         <style>
-        /* 棚板にほんのりグラデーション */
+        /* 棚板にグラデーション */
         div[data-testid="stHorizontalBlock"] {
             background-image: linear-gradient(180deg, #CFA877 0%, #C19A6B 55%, #B58A57 100%) !important;
         }
         div[data-testid="stExpander"] div[data-testid="stHorizontalBlock"] {
             background-image: none !important;
         }
-        /* 本のタイトルは2行まで（棚の高さをそろえる） */
+        /* 本のタイトルは2行まで */
         .book-title {
             font-size: 0.85rem;
             font-weight: 700;
@@ -841,7 +843,6 @@ if st.session_state.page == "bookshelf":
 
     # ① デフォルトで閉じる
     with st.expander("➕ AI書店員に本を探してもらう", expanded=False):
-        # Enterキーでも検索できるようにフォーム化
         with st.form("search_form", clear_on_submit=False):
             search_keyword = st.text_input("本のタイトル・著者",
                                            placeholder="例：嫌われる勇気 / 付加価値のつくりかた / シン・営業力")
@@ -918,7 +919,6 @@ if st.session_state.page == "bookshelf":
                 else:
                     st.info("AIが本を見つけられなかったよ。キーワードを変えて試してね。")
 
-            # ④ 検索結果が出た後に手動登録ボタンを表示
             st.write("---")
             with st.popover("📝 見つからない時は手動で登録する"):
                 manual_title = st.text_input("タイトル（必須）")
@@ -982,7 +982,7 @@ if st.session_state.page == "bookshelf":
         if not view_books:
             st.info("条件に合う本が見つからなかったよ。")
 
-        # ⑦ 本の隙間を詰めて、5列で並べる。超えたら下の段へ自動追加
+        # 5列で出力（スマホではCSSで自動的に2列に折り返されます）
         cols_per_row = 5
         for i in range(0, len(view_books), cols_per_row):
             cols = st.columns(cols_per_row, gap="small")
@@ -1018,23 +1018,27 @@ if st.session_state.page == "bookshelf":
 # ==========================================
 elif st.session_state.page == "detail":
     
-    # 📱 スマホ向け：メモの編集・削除ボタンを横並びにするCSS
+    # 📱 スマホ向け：メモの編集・削除ボタンを強制的に横並びにするCSS
     st.markdown("""
     <style>
     @media (max-width: 768px) {
-        /* メモ一覧の枠線付きコンテナ内にある「編集」「削除」ボタンの列を横並びにする */
+        /* メモの中のボタン配置エリアを横並びFlexに固定 */
         div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] {
+            display: flex !important;
             flex-direction: row !important;
             flex-wrap: nowrap !important;
+            align-items: center !important;
             gap: 10px !important;
         }
-        div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+        div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] > div[data-testid="column"],
+        div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] {
             width: auto !important;
             min-width: 0 !important;
-            flex: 0 1 auto !important;
+            flex: 0 0 auto !important;
+            margin-bottom: 0 !important;
         }
-        /* 余白調整用の3列目を非表示にする */
-        div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:nth-child(3) {
+        /* 画面右端の空白用カラムを消去 */
+        div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] > div:nth-child(3) {
             display: none !important;
         }
     }
@@ -1056,7 +1060,6 @@ elif st.session_state.page == "detail":
     insight_time_key = f"insight_time_{book_id}"
     show_key = f"show_insight_{book_id}"
 
-    # メモとInsightは、足りないものだけを同時に取得
     need_memos = memo_key not in st.session_state
     need_insight = insight_key not in st.session_state
     if need_memos or need_insight:
@@ -1135,7 +1138,7 @@ elif st.session_state.page == "detail":
         if memo_text.strip():
             ok, err = add_memo(book_id, memo_text.strip())
             if ok:
-                st.session_state.pop(memo_key, None)  # 新しいメモのIDを取るため再取得
+                st.session_state.pop(memo_key, None)
                 st.session_state.flash = "メモを保存したよ！"
                 st.rerun()
             else:
@@ -1164,7 +1167,6 @@ elif st.session_state.page == "detail":
                             if edited.strip():
                                 ok, err = update_memo(memo_id, edited.strip())
                                 if ok:
-                                    # 再取得せず、画面側のデータを直接更新（速い）
                                     for x in memos:
                                         if str(x.get("メモID", "")) == memo_id:
                                             x["メモ"] = edited.strip()
@@ -1188,7 +1190,6 @@ elif st.session_state.page == "detail":
                         if st.button("はい", key=f"yes_{memo_id}", type="primary"):
                             ok, err = delete_memo(memo_id)
                             if ok:
-                                # 再取得せず、画面側のデータから外す（速い）
                                 st.session_state[memo_key] = [
                                     x for x in memos if str(x.get("メモID", "")) != memo_id
                                 ]
@@ -1218,7 +1219,6 @@ elif st.session_state.page == "detail":
     else:
         st.info("まだメモがないよ。最初の気づきを書いてみよう！")
 
-    # ⑧ 画面の一番下に本削除（誤タップ防止のため折りたたみ内）
     st.divider()
     with st.expander("⚙️ 管理（本の削除）", expanded=bool(st.session_state.get("confirm_delete_book"))):
         if st.session_state.get("confirm_delete_book"):
