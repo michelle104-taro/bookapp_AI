@@ -1029,62 +1029,70 @@ elif st.session_state.page == "detail":
     # 📱 スマホでも100%絶対に縦に崩れないCSS定義
     st.markdown("""
     <style>
-    /* メモカード（枠線）の上下余白を極限まで詰める */
-    div[data-testid="stVerticalBlockBorderWrapper"] {
-        padding: 10px 12px 8px 12px !important;
-        margin-bottom: 6px !important;
-        border-radius: 8px !important;
-    }
-    
-    /* カード内のテキストや日付の余白をカット */
-    div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stVerticalBlock"] {
-        gap: 2px !important;
-    }
+/* メモカード（枠線）の上下余白をコンパクト化 */
+div[data-testid="stVerticalBlockBorderWrapper"] {
+    padding: 10px 12px 8px 12px !important;
+    margin-bottom: 6px !important;
+    border-radius: 8px !important;
+}
 
-    /* ボタン群を包むコンテナを「横並び（row）」に固定 */
-    .memo-btn-box {
-        display: flex !important;
-        flex-direction: row !important;
-        align-items: center !important;
-        justify-content: flex-start !important;
-        gap: 8px !important;
-        margin-top: 6px !important;
-    }
+/* カード内のテキストや日付の余白をカット */
+div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stVerticalBlock"] {
+    gap: 2px !important;
+}
 
-    /* ボタン自体のサイズカット（コンパクト化） */
-    .memo-btn-box button {
-        padding: 2px 10px !important;
-        min-height: 28px !important;
-        height: 28px !important;
-        font-size: 0.78rem !important;
-        line-height: 1.0 !important;
-        border-radius: 4px !important;
-        width: auto !important;
-    }
+/* ★★★ ココが最重要！Streamlitが自動挿入するボタンの親ブロックを横並び化 ★★★ */
+.memo-btn-box {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    gap: 8px !important;
+    margin-top: 6px !important;
+}
 
-    /* 「編集」ボタン（ほんのりオレンジ） */
-    .memo-btn-box button[kind="secondary"]:first-child,
-    .memo-btn-box div:first-child button {
-        background-color: #fff3e0 !important;
-        border: 1px solid #ffb74d !important;
-    }
-    .memo-btn-box button[kind="secondary"]:first-child *,
-    .memo-btn-box div:first-child button * {
-        color: #e65100 !important;
-        font-weight: 600 !important;
-    }
+/* Streamlit独自のボタンラッパー要素を幅自動＆インライン化 */
+.memo-btn-box > div[data-testid="element-container"],
+.memo-btn-box > div.stElementContainer,
+.memo-btn-box > div {
+    width: auto !important;
+    min-width: 0 !important;
+    flex: 0 0 auto !important;
+    display: inline-block !important;
+    margin: 0 !important;
+}
 
-    /* 「削除」ボタン（グレー枠） */
-    .memo-btn-box button[kind="secondary"]:last-child,
-    .memo-btn-box div:last-child button {
-        background-color: #ffffff !important;
-        border: 1px solid #dcdcdc !important;
-    }
-    .memo-btn-box button[kind="secondary"]:last-child *,
-    .memo-btn-box div:last-child button * {
-        color: #666666 !important;
-    }
-    </style>
+/* ボタン自体のサイズ調整 */
+.memo-btn-box button {
+    padding: 2px 10px !important;
+    min-height: 28px !important;
+    height: 28px !important;
+    font-size: 0.78rem !important;
+    line-height: 1.0 !important;
+    border-radius: 4px !important;
+    width: auto !important;
+}
+
+/* 「編集」ボタン（ほんのりオレンジ） */
+.memo-btn-box > div:first-child button {
+    background-color: #fff3e0 !important;
+    border: 1px solid #ffb74d !important;
+}
+.memo-btn-box > div:first-child button * {
+    color: #e65100 !important;
+    font-weight: 600 !important;
+}
+
+/* 「削除」ボタン（グレー枠） */
+.memo-btn-box > div:nth-child(2) button {
+    background-color: #ffffff !important;
+    border: 1px solid #dcdcdc !important;
+}
+.memo-btn-box > div:nth-child(2) button * {
+    color: #666666 !important;
+}
+</style>
     """, unsafe_allow_html=True)
     
     book = st.session_state.selected_book
