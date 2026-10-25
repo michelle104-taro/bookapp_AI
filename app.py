@@ -1027,72 +1027,74 @@ if st.session_state.page == "bookshelf":
 elif st.session_state.page == "detail":
     
     # 📱 スマホ向け：メモリストの一覧性向上＆ボタンの完全横並び化CSS
-<style>
-/* 1. メモコンテナの余白とメモ同士の間隔を極限まで縮める */
-div[data-testid="stVerticalBlockBorderWrapper"] {
-    padding: 0.6rem 0.8rem 0.4rem 0.8rem !important;
-    margin-bottom: -0.8rem !important;
-    border-radius: 6px !important;
-}
+    st.markdown("""
+    <style>
+    /* 1. メモコンテナの余白とメモ同士の間隔を極限まで縮める */
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        padding: 0.6rem 0.8rem 0.4rem 0.8rem !important;
+        margin-bottom: -0.8rem !important;
+        border-radius: 6px !important;
+    }
 
-div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stVerticalBlock"] {
-    gap: 0.1rem !important;
-}
+    div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stVerticalBlock"] {
+        gap: 0.1rem !important;
+    }
 
-/* 2. ボタンを横並びに強制配置 */
-div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stHorizontalBlock"] {
-    display: flex !important;
-    flex-direction: row !important;
-    flex-wrap: nowrap !important;
-    justify-content: flex-start !important;
-    align-items: center !important;
-    gap: 6px !important;
-    margin-top: 4px !important;
-}
+    /* 2. ボタンを横並びに強制配置 */
+    div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stHorizontalBlock"] {
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        justify-content: flex-start !important;
+        align-items: center !important;
+        gap: 6px !important;
+        margin-top: 4px !important;
+    }
 
-div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stHorizontalBlock"] > [data-testid="column"],
-div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
-    width: auto !important;
-    min-width: 0 !important;
-    max-width: none !important;
-    flex: 0 0 auto !important;
-    padding: 0 !important;
-}
+    div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stHorizontalBlock"] > [data-testid="column"],
+    div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+        width: auto !important;
+        min-width: 0 !important;
+        max-width: none !important;
+        flex: 0 0 auto !important;
+        padding: 0 !important;
+    }
 
-/* 余白用の3列目を完全消去 */
-div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stHorizontalBlock"] > div:nth-child(3) {
-    display: none !important;
-}
+    /* 余白用の3列目を完全消去 */
+    div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stHorizontalBlock"] > div:nth-child(3) {
+        display: none !important;
+    }
 
-/* 3. ボタン自体のサイズカット（コンパクト化） */
-div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stHorizontalBlock"] button {
-    padding: 2px 8px !important;       /* ボタン内部の余白を極小に */
-    min-height: 26px !important;       /* ボタンの高さを小さく */
-    height: 26px !important;
-    font-size: 0.75rem !important;     /* 文字サイズを1階層下げ */
-    line-height: 1.0 !important;
-    border-radius: 4px !important;
-}
+    /* 3. ボタン自体のサイズカット（コンパクト化） */
+    div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stHorizontalBlock"] button {
+        padding: 2px 8px !important;       /* ボタン内部の余白を極小に */
+        min-height: 26px !important;       /* ボタンの高さを小さく */
+        height: 26px !important;
+        font-size: 0.75rem !important;     /* 文字サイズを1階層下げ */
+        line-height: 1.0 !important;
+        border-radius: 4px !important;
+    }
 
-/* 4. 編集ボタン（1つ目のボタン）だけをほんのりオレンジ色にする */
-div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stHorizontalBlock"] > div:nth-child(1) button {
-    background-color: #fff3e0 !important; /* 薄いオレンジ背景 */
-    border: 1px solid #ffb74d !important; /* オレンジの枠線 */
-}
-div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stHorizontalBlock"] > div:nth-child(1) button * {
-    color: #e65100 !important;            /* オレンジ色の文字 */
-    font-weight: 600 !important;
-}
+    /* 4. 編集ボタン（1つ目のボタン）だけをほんのりオレンジ色にする */
+    div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stHorizontalBlock"] > div:nth-child(1) button {
+        background-color: #fff3e0 !important; /* 薄いオレンジ背景 */
+        border: 1px solid #ffb74d !important; /* オレンジの枠線 */
+    }
+    div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stHorizontalBlock"] > div:nth-child(1) button * {
+        color: #e65100 !important;            /* オレンジ色の文字 */
+        font-weight: 600 !important;
+    }
 
-/* 削除ボタン（2つ目のボタン）の標準スタイル調整 */
-div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stHorizontalBlock"] > div:nth-child(2) button {
-    background-color: #ffffff !important;
-    border: 1px solid #dcdcdc !important;
-}
-div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stHorizontalBlock"] > div:nth-child(2) button * {
-    color: #666666 !important;
-}
-</style>
+    /* 削除ボタン（2つ目のボタン）の標準スタイル調整 */
+    div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stHorizontalBlock"] > div:nth-child(2) button {
+        background-color: #ffffff !important;
+        border: 1px solid #dcdcdc !important;
+    }
+    div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stHorizontalBlock"] > div:nth-child(2) button * {
+        color: #666666 !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
     
     book = st.session_state.selected_book
     book_id = get_book_id(book)
