@@ -1026,40 +1026,53 @@ if st.session_state.page == "bookshelf":
 # ==========================================
 elif st.session_state.page == "detail":
     
-    # 📱 スマホ向け：メモの「編集」「削除」ボタンのサイズと余白を詰めて横並びにおさめるCSS
+    # 📱 スマホ向け：メモリストの一覧性向上＆ボタンの完全横並び化CSS
     st.markdown("""
     <style>
-    @media (max-width: 768px) {
-        /* メモ内のボタン配置ブロック */
-        div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] {
-            display: flex !important;
-            flex-direction: row !important;
-            flex-wrap: nowrap !important;
-            align-items: center !important;
-            justify-content: flex-start !important;
-            gap: 6px !important;
-        }
-        /* 各カラムの幅自動調整と最小幅の削除 */
-        div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] > div[data-testid="column"],
-        div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] {
-            width: auto !important;
-            min-width: 0 !important;
-            max-width: none !important;
-            flex: 0 0 auto !important;
-            margin: 0 !important;
-            padding: 0 !important;
-        }
-        /* ボタン自体のサイズ・余白をキュッとコンパクトに */
-        div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] button {
-            padding: 2px 8px !important;
-            font-size: 0.8rem !important;
-            min-height: 32px !important;
-            line-height: 1.2 !important;
-        }
-        /* 3列目の余白用カラムを削除 */
-        div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] > div:nth-child(3) {
-            display: none !important;
-        }
+    /* 1. メモコンテナ（枠線あり）の余白と隙間を極限まで詰める */
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        padding: 0.8rem 0.8rem 0.5rem 0.8rem !important; /* 内側の余白を圧縮 */
+        margin-bottom: -0.5rem !important; /* メモ同士の隙間を大幅に縮める */
+        border-radius: 6px !important;
+    }
+    
+    /* メモ内のテキストや日付の縦の隙間を詰める */
+    div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stVerticalBlock"] {
+        gap: 0.2rem !important;
+    }
+    
+    /* 2. 編集・削除ボタンを絶対に横並びにする（Streamlitの仕様を強制上書き） */
+    div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stHorizontalBlock"] {
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        justify-content: flex-start !important;
+        align-items: center !important;
+        gap: 8px !important;
+        margin-top: 5px !important;
+    }
+
+    /* スマホ画面で幅100%に強制されるのを防ぐ */
+    div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stHorizontalBlock"] > [data-testid="column"],
+    div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+        width: auto !important;
+        min-width: 0 !important;
+        max-width: none !important;
+        flex: 0 0 auto !important; /* 文字数に合わせた幅にする */
+        padding: 0 !important;
+    }
+
+    /* 3列目の余白用カラムを非表示にしてスペースを空ける */
+    div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stHorizontalBlock"] > div:nth-child(3) {
+        display: none !important;
+    }
+
+    /* ボタンのサイズ自体をコンパクトにする */
+    div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stHorizontalBlock"] button {
+        padding: 2px 12px !important;
+        min-height: 30px !important;
+        font-size: 0.85rem !important;
+        line-height: 1.2 !important;
     }
     </style>
     """, unsafe_allow_html=True)
