@@ -1025,76 +1025,71 @@ if st.session_state.page == "bookshelf":
 # 📖 詳細・メモ画面
 # ==========================================
 elif st.session_state.page == "detail":
-    
-    # 📱 スマホでも100%絶対に縦に崩れないCSS定義
+
+    # 日時の表示を読みやすくする（ISO形式 → 日本時間）
+    def format_dt(s):
+        from datetime import datetime, timedelta, timezone
+        s = str(s or "").strip()
+        if re.match(r"^\d{4}-\d{2}-\d{2}T", s):
+            try:
+                dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                return dt.astimezone(timezone(timedelta(hours=9))).strftime("%Y/%m/%d %H:%M")
+            except Exception:
+                return s
+        return s
+
     st.markdown("""
     <style>
-/* メモカード（枠線）の上下余白をコンパクト化 */
-div[data-testid="stVerticalBlockBorderWrapper"] {
-    padding: 10px 12px 8px 12px !important;
-    margin-bottom: 6px !important;
-    border-radius: 8px !important;
-}
+    /* メモカード（枠線）の上下余白をコンパクト化 */
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        padding: 10px 12px 8px 12px !important;
+        margin-bottom: 6px !important;
+        border-radius: 8px !important;
+    }
+    div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stVerticalBlock"] {
+        gap: 2px !important;
+    }
 
-/* カード内のテキストや日付の余白をカット */
-div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stVerticalBlock"] {
-    gap: 2px !important;
-}
+    /* 📱 スマホ：st.columnsで作った「3列の行」（編集・削除・空き）を横一列にする */
+    @media (max-width: 768px) {
+        div[data-testid="stHorizontalBlock"] {
+            flex-direction: row !important;
+            flex-wrap: wrap !important;
+        }
 
-/* ★★★ ココが最重要！Streamlitが自動挿入するボタンの親ブロックを横並び化 ★★★ */
-.memo-btn-box {
-    display: flex !important;
-    flex-direction: row !important;
-    flex-wrap: nowrap !important;
-    align-items: center !important;
-    justify-content: flex-start !important;
-    gap: 8px !important;
-    margin-top: 6px !important;
-}
+        /* 3列の行の「1列目」と「2列目」：中身の幅だけにして横に並べる */
+        div[data-testid="stHorizontalBlock"] > div:nth-child(1):nth-last-child(3),
+        div[data-testid="stHorizontalBlock"] > div:nth-child(2):nth-last-child(2) {
+            flex: 0 0 auto !important;
+            width: auto !important;
+            min-width: 0 !important;
+            max-width: none !important;
+        }
 
-/* Streamlit独自のボタンラッパー要素を幅自動＆インライン化 */
-.memo-btn-box > div[data-testid="element-container"],
-.memo-btn-box > div.stElementContainer,
-.memo-btn-box > div {
-    width: auto !important;
-    min-width: 0 !important;
-    flex: 0 0 auto !important;
-    display: inline-block !important;
-    margin: 0 !important;
-}
+        /* 3列の行の「3列目」（空きスペース）は消して横幅を確保 */
+        div[data-testid="stHorizontalBlock"] > div:nth-child(3):nth-last-child(1) {
+            display: none !important;
+        }
 
-/* ボタン自体のサイズ調整 */
-.memo-btn-box button {
-    padding: 2px 10px !important;
-    min-height: 28px !important;
-    height: 28px !important;
-    font-size: 0.78rem !important;
-    line-height: 1.0 !important;
-    border-radius: 4px !important;
-    width: auto !important;
-}
+        /* ボタンをコンパクトに */
+        div[data-testid="stHorizontalBlock"] > div:nth-child(1):nth-last-child(3) button,
+        div[data-testid="stHorizontalBlock"] > div:nth-child(2):nth-last-child(2) button {
+            padding: 2px 12px !important;
+            min-height: 34px !important;
+            font-size: 0.85rem !important;
+        }
 
-/* 「編集」ボタン（ほんのりオレンジ） */
-.memo-btn-box > div:first-child button {
-    background-color: #fff3e0 !important;
-    border: 1px solid #ffb74d !important;
-}
-.memo-btn-box > div:first-child button * {
-    color: #e65100 !important;
-    font-weight: 600 !important;
-}
-
-/* 「削除」ボタン（グレー枠） */
-.memo-btn-box > div:nth-child(2) button {
-    background-color: #ffffff !important;
-    border: 1px solid #dcdcdc !important;
-}
-.memo-btn-box > div:nth-child(2) button * {
-    color: #666666 !important;
-}
-</style>
+        /* メモの文字を少し小さく・行間を詰める */
+        div[data-testid="stVerticalBlockBorderWrapper"] p {
+            font-size: 0.92rem !important;
+            line-height: 1.55 !important;
+        }
+    }
+    </style>
     """, unsafe_allow_html=True)
-    
+
     book = st.session_state.selected_book
     book_id = get_book_id(book)
     title = get_field(book, ["タイトル"], "タイトル不明")
@@ -1170,7 +1165,7 @@ div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stVerticalBlock"] 
     if insight_text and st.session_state.get(show_key, False):
         with st.container(border=True):
             st.markdown("### ✨ AI Insight")
-            st.caption(f"🕒 更新: {st.session_state.get(insight_time_key, '')}")
+            st.caption(f"🕒 更新: {format_dt(st.session_state.get(insight_time_key, ''))}")
             st.markdown(insight_text)
 
     st.divider()
@@ -1207,73 +1202,65 @@ div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stVerticalBlock"] 
         for m in reversed(memos):
             memo_id = str(m.get("メモID", ""))
             with st.container(border=True):
-                st.caption(f"🕒 {m.get('日時', '')}")
+                st.caption(f"🕒 {format_dt(m.get('日時', ''))}")
 
                 if st.session_state.editing_memo_id == memo_id:
                     edited = st.text_area("メモを編集", value=m.get("メモ", ""), height=110, key=f"edit_text_{memo_id}")
-                    # ボタン配置（st.columnsではなく自前フレックス）
-                    st.markdown('<div class="memo-btn-box">', unsafe_allow_html=True)
-                    btn_upd = st.button("✅ 更新", key=f"upd_{memo_id}")
-                    btn_can = st.button("✖️ キャンセル", key=f"cancel_{memo_id}")
-                    st.markdown('</div>', unsafe_allow_html=True)
-
-                    if btn_upd:
-                        if edited.strip():
-                            ok, err = update_memo(memo_id, edited.strip())
-                            if ok:
-                                for x in memos:
-                                    if str(x.get("メモID", "")) == memo_id:
-                                        x["メモ"] = edited.strip()
-                                st.session_state.editing_memo_id = None
-                                st.session_state.flash = "メモを更新したよ！"
-                                st.rerun()
+                    c1, c2, _ = st.columns([1, 1, 4])
+                    with c1:
+                        if st.button("✅ 更新", key=f"upd_{memo_id}"):
+                            if edited.strip():
+                                ok, err = update_memo(memo_id, edited.strip())
+                                if ok:
+                                    for x in memos:
+                                        if str(x.get("メモID", "")) == memo_id:
+                                            x["メモ"] = edited.strip()
+                                    st.session_state.editing_memo_id = None
+                                    st.session_state.flash = "メモを更新したよ！"
+                                    st.rerun()
+                                else:
+                                    st.error(f"更新に失敗したよ: {err}")
                             else:
-                                st.error(f"更新に失敗したよ: {err}")
-                        else:
-                            st.warning("メモが空だよ。")
-                    if btn_can:
-                        st.session_state.editing_memo_id = None
-                        st.rerun()
+                                st.warning("メモが空だよ。")
+                    with c2:
+                        if st.button("✖️ キャンセル", key=f"cancel_{memo_id}"):
+                            st.session_state.editing_memo_id = None
+                            st.rerun()
 
                 elif st.session_state.confirm_delete_id == memo_id:
                     st.write(m.get("メモ", ""))
                     st.warning("このメモを削除しますか？（元に戻せません）")
-                    st.markdown('<div class="memo-btn-box">', unsafe_allow_html=True)
-                    btn_yes = st.button("はい", key=f"yes_{memo_id}", type="primary")
-                    btn_no = st.button("いいえ", key=f"no_{memo_id}")
-                    st.markdown('</div>', unsafe_allow_html=True)
-
-                    if btn_yes:
-                        ok, err = delete_memo(memo_id)
-                        if ok:
-                            st.session_state[memo_key] = [
-                                x for x in memos if str(x.get("メモID", "")) != memo_id
-                            ]
+                    c1, c2, _ = st.columns([1, 1, 4])
+                    with c1:
+                        if st.button("はい", key=f"yes_{memo_id}", type="primary"):
+                            ok, err = delete_memo(memo_id)
+                            if ok:
+                                st.session_state[memo_key] = [
+                                    x for x in memos if str(x.get("メモID", "")) != memo_id
+                                ]
+                                st.session_state.confirm_delete_id = None
+                                st.session_state.flash = "メモを削除したよ。"
+                                st.rerun()
+                            else:
+                                st.error(f"削除に失敗したよ: {err}")
+                    with c2:
+                        if st.button("いいえ", key=f"no_{memo_id}"):
                             st.session_state.confirm_delete_id = None
-                            st.session_state.flash = "メモを削除したよ。"
                             st.rerun()
-                        else:
-                            st.error(f"削除に失敗したよ: {err}")
-                    if btn_no:
-                        st.session_state.confirm_delete_id = None
-                        st.rerun()
 
                 else:
                     st.write(m.get("メモ", ""))
-                    # ★★★ ポイント: st.columnsをやめて自作HTMLタグで包む ★★★
-                    st.markdown('<div class="memo-btn-box">', unsafe_allow_html=True)
-                    btn_edit = st.button("編集", key=f"edit_{memo_id}")
-                    btn_del = st.button("削除", key=f"del_{memo_id}")
-                    st.markdown('</div>', unsafe_allow_html=True)
-
-                    if btn_edit:
-                        st.session_state.editing_memo_id = memo_id
-                        st.session_state.confirm_delete_id = None
-                        st.rerun()
-                    if btn_del:
-                        st.session_state.confirm_delete_id = memo_id
-                        st.session_state.editing_memo_id = None
-                        st.rerun()
+                    c1, c2, _ = st.columns([1, 1, 4])
+                    with c1:
+                        if st.button("編集", key=f"edit_{memo_id}"):
+                            st.session_state.editing_memo_id = memo_id
+                            st.session_state.confirm_delete_id = None
+                            st.rerun()
+                    with c2:
+                        if st.button("削除", key=f"del_{memo_id}"):
+                            st.session_state.confirm_delete_id = memo_id
+                            st.session_state.editing_memo_id = None
+                            st.rerun()
     else:
         st.info("まだメモがないよ。最初の気づきを書いてみよう！")
 
