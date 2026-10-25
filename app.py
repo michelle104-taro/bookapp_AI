@@ -1043,14 +1043,21 @@ elif st.session_state.page == "detail":
     st.markdown("""
     <style>
     /* メモカード（枠線）の上下余白をコンパクト化 */
-　　　div[data-testid="stTextArea"] textarea {
+　　/* メモ入力欄・編集欄：背景は濃いグレー、文字は白 */
+div[data-testid="stTextArea"] textarea,
+div[data-testid="stForm"] textarea,
+textarea {
+    background-color: #2b2d3a !important;
     color: #ffffff !important;
     -webkit-text-fill-color: #ffffff !important;
     caret-color: #ffffff !important;
-　　　}
-    div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stVerticalBlock"] {
-        gap: 2px !important;
-    }
+    border: 1px solid #5a5d70 !important;
+}
+div[data-testid="stTextArea"] textarea::placeholder,
+textarea::placeholder {
+    color: #aab0c0 !important;
+    -webkit-text-fill-color: #aab0c0 !important;
+}
 
     /* 📱 スマホ：st.columnsで作った「3列の行」（編集・削除・空き）を横一列にする */
     @media (max-width: 768px) {
