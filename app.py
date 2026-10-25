@@ -1259,7 +1259,7 @@ textarea::placeholder {
                     st.write(m.get("メモ", ""))
                     c1, c2, _ = st.columns([1, 1, 4])
                     with c1:
-                        if st.button("編集", key=f"edit_{memo_id}"):
+                        if st.button("編集✏️", key=f"edit_{memo_id}"):
                             st.session_state.editing_memo_id = memo_id
                             st.session_state.confirm_delete_id = None
                             st.rerun()
