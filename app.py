@@ -1043,11 +1043,11 @@ elif st.session_state.page == "detail":
     st.markdown("""
     <style>
     /* メモカード（枠線）の上下余白をコンパクト化 */
-    div[data-testid="stVerticalBlockBorderWrapper"] {
-        padding: 10px 12px 8px 12px !important;
-        margin-bottom: 6px !important;
-        border-radius: 8px !important;
-    }
+　　　div[data-testid="stTextArea"] textarea {
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+    caret-color: #ffffff !important;
+　　　}
     div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stVerticalBlock"] {
         gap: 2px !important;
     }
