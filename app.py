@@ -6,6 +6,7 @@ import time
 import unicodedata
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
 
 import requests
@@ -15,7 +16,7 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # ★★★ 発行したGASのURL ★★★
-GAS_URL = "https://script.google.com/macros/s/AKfycbyjCGR7_X5dDvnHjsK-CosihwtmeQqS_Vo4xSWVKQiNY8k8nwBCdjv05yx4XA7rCA_HrA/exec"
+GAS_URL = "https://script.google.com/macros/s/AKfycbzvJ6bm9xmm2uaJKUsrxNK_yUjTmJezf71B2xWq_sRnCYqI8nuoN0JQUzllzRPcAkXsbA/exec"
 
 VERIFY_SSL = False
 PLACEHOLDER_IMG = "https://placehold.co/130x180/e2e8f0/a0aec0?text=No+Image"
@@ -52,12 +53,18 @@ GEMINI_PER_TRY_TIMEOUT = 25
 GEMINI_TOTAL_BUDGET = 40
 
 # ==========================================
-# 🎨 ベースCSS（アプリ全体の文字色・ボタン保護）
+# 🎨 ベースCSS（アプリ全体の文字色・ボタン保護・見出し）
 # ==========================================
 st.markdown("""
 <style>
 .stApp {
     background-color: #f9f6f0 !important;
+}
+
+/* 上の余白を詰める（ヘッダー分は確保） */
+.block-container,
+div[data-testid="stMainBlockContainer"] {
+    padding-top: 4rem !important;
 }
 
 p, span, label, h1, h2, h3, h4, h5, h6, li, div {
@@ -83,6 +90,25 @@ div[data-testid="stImage"] img {
     box-shadow: 5px 5px 10px rgba(0,0,0,0.4);
     border-radius: 2px;
 }
+
+/* 見出し（本棚タイトル・本の詳細タイトル） */
+.shelf-title {
+    text-align: center;
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1.3;
+    margin: 0 0 0.8rem 0;
+}
+.detail-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    line-height: 1.4;
+    margin: 0.3rem 0 0.4rem 0;
+}
+@media (max-width: 768px) {
+    .shelf-title { font-size: 1.8rem; }
+    .detail-title { font-size: 1.2rem; }
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -106,6 +132,7 @@ _defaults = {
     "editing_memo_id": None,
     "confirm_delete_id": None,
     "confirm_delete_book": False,
+    "manage_open": False,
     "flash": "",
     "books_cache": None,
     "books_cache_time": 0.0,
@@ -166,6 +193,19 @@ def get_book_id(book):
             return str(v).strip()
     return ""
 
+def format_dt(s):
+    """日時の表示を読みやすくする（ISO形式 → 日本時間）"""
+    s = str(s or "").strip()
+    if re.match(r"^\d{4}-\d{2}-\d{2}T", s):
+        try:
+            dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone(timedelta(hours=9))).strftime("%Y/%m/%d %H:%M")
+        except Exception:
+            return s
+    return s
+
 def gas_post(payload):
     try:
         res = requests.post(GAS_URL, json=payload, timeout=30, allow_redirects=True, verify=VERIFY_SSL)
@@ -181,12 +221,21 @@ def gas_post(payload):
     except Exception as e:
         return False, str(e)
 
+def explain_gas_error(err, action_name):
+    """GAS側に処理が無い時は、原因のヒントを付けて表示する"""
+    msg = str(err)
+    if "不明" in msg or "unknown" in msg.lower():
+        return (f"{msg}（GAS側に「{action_name}」の処理がまだ無いようです。"
+                "GASを更新して、新バージョンで再デプロイしてね）")
+    return msg
+
 # ---------- 画面遷移（URLに本のIDを持たせて、F5でも戻れるようにする）----------
 def open_book(book):
     st.session_state.selected_book = book
     st.session_state.editing_memo_id = None
     st.session_state.confirm_delete_id = None
     st.session_state.confirm_delete_book = False
+    st.session_state.manage_open = False
     st.session_state.page = "detail"
     bid = get_book_id(book)
     if bid:
@@ -201,6 +250,7 @@ def close_book():
     st.session_state.editing_memo_id = None
     st.session_state.confirm_delete_id = None
     st.session_state.confirm_delete_book = False
+    st.session_state.manage_open = False
     try:
         st.query_params.clear()
     except Exception:
@@ -231,6 +281,18 @@ def restore_from_url():
 # ---------- 本・メモ・Insight（GAS連携）----------
 def delete_book(book_id):
     return gas_post({"action": "deleteBook", "bookId": str(book_id)})
+
+def update_book_image(book_id, image_url):
+    return gas_post({"action": "updateBookImage", "bookId": str(book_id), "imageUrl": image_url})
+
+def apply_local_image_update(book_id, image_url):
+    """画像URL更新後、画面側のデータにも反映（再取得しなくて済む）"""
+    sel = st.session_state.get("selected_book")
+    if isinstance(sel, dict):
+        sel["画像URL"] = image_url
+    for b in (st.session_state.get("books_cache") or []):
+        if get_book_id(b) == str(book_id):
+            b["画像URL"] = image_url
 
 def fetch_memos(book_id):
     """成功: メモのリスト / 失敗: None"""
@@ -843,7 +905,7 @@ if st.session_state.page == "bookshelf":
         </style>
         """, unsafe_allow_html=True)
 
-    st.title("📚 わたしの本棚")
+    st.markdown("<div class='shelf-title'>📚 わたしの本棚</div>", unsafe_allow_html=True)
 
     # 本棚データ（キャッシュ使用）
     books, books_ok = load_books()
@@ -1026,38 +1088,36 @@ if st.session_state.page == "bookshelf":
 # ==========================================
 elif st.session_state.page == "detail":
 
-    # 日時の表示を読みやすくする（ISO形式 → 日本時間）
-    def format_dt(s):
-        from datetime import datetime, timedelta, timezone
-        s = str(s or "").strip()
-        if re.match(r"^\d{4}-\d{2}-\d{2}T", s):
-            try:
-                dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone.utc)
-                return dt.astimezone(timezone(timedelta(hours=9))).strftime("%Y/%m/%d %H:%M")
-            except Exception:
-                return s
-        return s
-
     st.markdown("""
     <style>
     /* メモカード（枠線）の上下余白をコンパクト化 */
-　　/* メモ入力欄・編集欄：背景は濃いグレー、文字は白 */
-div[data-testid="stTextArea"] textarea,
-div[data-testid="stForm"] textarea,
-textarea {
-    background-color: #2b2d3a !important;
-    color: #ffffff !important;
-    -webkit-text-fill-color: #ffffff !important;
-    caret-color: #ffffff !important;
-    border: 1px solid #5a5d70 !important;
-}
-div[data-testid="stTextArea"] textarea::placeholder,
-textarea::placeholder {
-    color: #aab0c0 !important;
-    -webkit-text-fill-color: #aab0c0 !important;
-}
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        padding: 10px 12px 8px 12px !important;
+        margin-bottom: 6px !important;
+        border-radius: 8px !important;
+    }
+    div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stVerticalBlock"] {
+        gap: 2px !important;
+    }
+
+    /* メモ入力欄・編集欄：背景は濃いグレー、文字は白 */
+    div[data-testid="stTextArea"] textarea,
+    textarea {
+        background-color: #2b2d3a !important;
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+        caret-color: #ffffff !important;
+        border: 1px solid #5a5d70 !important;
+    }
+    div[data-testid="stTextArea"] div[data-baseweb="textarea"],
+    div[data-testid="stTextArea"] div[data-baseweb="base-input"] {
+        background-color: #2b2d3a !important;
+    }
+    div[data-testid="stTextArea"] textarea::placeholder,
+    textarea::placeholder {
+        color: #aab0c0 !important;
+        -webkit-text-fill-color: #aab0c0 !important;
+    }
 
     /* 📱 スマホ：st.columnsで作った「3列の行」（編集・削除・空き）を横一列にする */
     @media (max-width: 768px) {
@@ -1141,7 +1201,7 @@ textarea::placeholder {
 
     col_main, col_btn = st.columns([4, 1])
     with col_main:
-        st.title(f"📖 {title}")
+        st.markdown(f"<div class='detail-title'>📖 {html.escape(title)}</div>", unsafe_allow_html=True)
         st.write(f"✍️ **著者:** {author}")
         st.markdown("##### 📄 概要")
         st.write(summary or "概要データがありません。")
@@ -1271,8 +1331,15 @@ textarea::placeholder {
     else:
         st.info("まだメモがないよ。最初の気づきを書いてみよう！")
 
+    # ==========================================
+    # ⚙️ 本の管理（削除・画像URL変更）
+    # ==========================================
     st.divider()
-    with st.expander("⚙️ 管理（本の削除）", expanded=bool(st.session_state.get("confirm_delete_book"))):
+    manage_expanded = bool(st.session_state.get("confirm_delete_book") or st.session_state.get("manage_open"))
+    with st.expander("⚙️ 本の管理", expanded=manage_expanded):
+
+        # ---- 🗑️ 本の削除 ----
+        st.markdown("##### 🗑️ 本の削除")
         if st.session_state.get("confirm_delete_book"):
             st.warning("⚠️ 本当にこの本を削除しますか？（本データ・メモ・Insight全て削除されます）")
             c1, c2 = st.columns([1, 4])
@@ -1286,7 +1353,7 @@ textarea::placeholder {
                         st.session_state.flash = f"「{title}」を本棚から削除したよ。"
                         st.rerun()
                     else:
-                        st.error(f"削除に失敗したよ: {err}")
+                        st.error(f"削除に失敗したよ: {explain_gas_error(err, 'deleteBook')}")
             with c2:
                 if st.button("キャンセル"):
                     st.session_state.confirm_delete_book = False
@@ -1295,3 +1362,28 @@ textarea::placeholder {
             if st.button("🗑️ この本を本棚から削除する"):
                 st.session_state.confirm_delete_book = True
                 st.rerun()
+
+        st.write("---")
+
+        # ---- 🖼️ 本の画像URL変更 ----
+        st.markdown("##### 🖼️ 本の画像URL変更")
+        current_img_url = get_field(book, ["画像URL", "画像", "imageUrl"], "")
+        new_img_url = st.text_input("画像URL", value=current_img_url,
+                                    key=f"img_edit_{book_id}", placeholder="https://...")
+        if new_img_url.strip().startswith("http"):
+            st.image(new_img_url.strip(), width=80)
+
+        if st.button("💾 画像URLを更新", key=f"img_save_{book_id}"):
+            u = new_img_url.strip()
+            if not u.startswith("http"):
+                st.warning("http から始まるURLを入力してね。")
+            else:
+                with st.spinner("更新中..."):
+                    ok, err = update_book_image(book_id, u)
+                if ok:
+                    apply_local_image_update(book_id, u)
+                    st.session_state.manage_open = True
+                    st.session_state.flash = "画像URLを更新したよ！"
+                    st.rerun()
+                else:
+                    st.error(f"更新に失敗したよ: {explain_gas_error(err, 'updateBookImage')}")
