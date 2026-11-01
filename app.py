@@ -747,6 +747,50 @@ h1,h2,h3,h4 { color:#243c33; letter-spacing:-.035em; }
  .st-key-shelf_controls [data-testid="stColumn"]:first-child { flex:1 1 60% !important; width:60% !important; }
  .st-key-shelf_controls [data-testid="stColumn"]:last-child { flex:1 1 40% !important; width:40% !important; }
 }
+
+/* 本棚一覧だけ：オークの木目と棚板。詳細・メモ画面には適用しない。 */
+.st-key-shelf_grid {
+ padding:18px !important;
+ border:1px solid #b48b5f;
+ border-left:7px solid #a57549;
+ border-right:7px solid #a57549;
+ border-radius:12px;
+ background:
+  repeating-linear-gradient(2deg,transparent 0 7px,rgba(107,66,29,.045) 8px,transparent 10px 18px),
+  repeating-linear-gradient(91deg,rgba(255,255,255,.055) 0 32px,rgba(122,76,34,.035) 34px 68px),
+  linear-gradient(110deg,#dfbd8e,#cfa574 45%,#dfbb8b);
+ box-shadow:inset 0 3px 14px rgba(78,45,19,.13),0 8px 22px rgba(85,55,27,.10);
+}
+.st-key-shelf_grid [class*="st-key-book_card_"] {
+ border:1px solid rgba(107,68,33,.15);
+ border-bottom:10px solid #a67546;
+ border-radius:9px;
+ background:linear-gradient(180deg,rgba(255,248,234,.72),rgba(245,224,191,.84));
+ box-shadow:0 5px 0 #815530,0 9px 12px rgba(79,46,20,.20),inset 0 1px 0 rgba(255,255,255,.65);
+}
+.st-key-shelf_grid .cover-stage {
+ background:
+  repeating-linear-gradient(1deg,transparent 0 9px,rgba(119,74,32,.045) 10px,transparent 12px 22px),
+  linear-gradient(135deg,#e8cea5,#d5af7d);
+ box-shadow:inset 0 2px 7px rgba(92,56,25,.12);
+}
+.st-key-shelf_grid .cover-stage img {
+ filter:drop-shadow(3px 7px 5px rgba(73,42,17,.25));
+}
+.st-key-shelf_grid .book-title { color:#45321f; }
+.st-key-shelf_grid .book-author { color:#796047; }
+.st-key-shelf_grid button[kind="secondary"] {
+ background:#fffaf1; border-color:#c6a67d; color:#59412a;
+}
+.st-key-shelf_grid button[kind="secondary"] p { color:#59412a; }
+.st-key-shelf_grid button[kind="secondary"]:hover {
+ background:#f5e6cf; border-color:#a77b4b;
+}
+@media (max-width:640px) {
+ .st-key-shelf_grid { padding:12px 8px !important; border-left-width:5px; border-right-width:5px; }
+ .st-key-shelf_grid [class*="st-key-book_card_"] { border-radius:8px; }
+}
+
 @media (prefers-reduced-motion:reduce) { .stApp button { transition:none; } }
 </style>
 """
@@ -1163,3 +1207,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
