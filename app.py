@@ -1174,7 +1174,7 @@ def render_management(book_id, book):
 
 
 def main():
-    st.set_page_config(page_title="わたしの本棚", page_icon="📖", layout="wide", initial_sidebar_state="collapsed")
+    st.set_page_config(page_title="凌太郎の本棚", page_icon="📖", layout="wide", initial_sidebar_state="collapsed")
     init_state()
     st.markdown(CSS, unsafe_allow_html=True)
     restore_from_url()
@@ -1198,7 +1198,7 @@ def main():
         render_memos(book_id)
         render_management(book_id, book)
     else:
-        st.markdown('<div class="hero"><div class="eyebrow">MY READING JOURNAL</div><h1>わたしの本棚</h1><p>読んだことを、わたしの言葉に。</p></div>', unsafe_allow_html=True)
+        st.markdown('<div class="hero"><div class="eyebrow">MY READING JOURNAL</div><h1>凌太郎の本棚</h1><p>読んだことを、凌太郎の言葉に。</p></div>', unsafe_allow_html=True)
         with st.spinner("本棚を読み込んでいます…", show_time=False):
             load_books()
         render_search()
